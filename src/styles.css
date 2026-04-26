@@ -1,0 +1,35 @@
+@font-face {
+  font-family: "EdgecaseTitle";
+  src: local("Bahnschrift"), local("Agency FB");
+}
+
+:root {
+  color-scheme: dark;
+  font-family: EdgecaseTitle, "Cascadia Mono", "Segoe UI", sans-serif;
+  background: #07100f;
+  color: #edf8ed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#game-root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(30, 115, 96, 0.2), transparent 34%),
+    linear-gradient(180deg, #091314 0%, #12120c 54%, #090a08 100%);
+}
+
+canvas {
+  display: block;
+  image-rendering: auto;
+}

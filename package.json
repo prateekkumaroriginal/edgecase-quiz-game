@@ -1,0 +1,70 @@
+{
+  "name": "edgecase-mcq-platformer",
+  "version": "0.1.3",
+  "author": "Prateek",
+  "description": "A desktop MCQ platformer MVP for Steam-oriented PC publishing.",
+  "main": "src/electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "vite build",
+    "preview": "vite --host 127.0.0.1",
+    "clean:release": "node scripts/clean-release.mjs",
+    "package:win": "npm run clean:release && npm run build && electron-builder --win nsis",
+    "package:linux": "npm run clean:release && npm run build && electron-builder --linux AppImage deb",
+    "package:mac": "npm run clean:release && npm run build && electron-builder --mac dmg zip",
+    "package:all": "npm run clean:release && npm run build && electron-builder -wlm",
+    "package:dir": "npm run clean:release && npm run build && electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.edgecase.mcqplatformer",
+    "productName": "Edgecase",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Game",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.games",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.1.12",
+    "wait-on": "^9.0.1"
+  }
+}
