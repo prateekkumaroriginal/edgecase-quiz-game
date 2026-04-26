@@ -20,7 +20,8 @@ export class GameScene extends Phaser.Scene {
     this.difficulty = this.registry.get("difficulty") || "normal";
     this.tuning = DIFFICULTY[this.difficulty];
     this.coins = 0;
-    this.damageTaken = 0;
+    this.maxHealth = 3;
+    this.health = this.maxHealth;
     this.answerStreak = 0;
     this.runEnded = false;
     this.quiz = null;
@@ -36,6 +37,7 @@ export class GameScene extends Phaser.Scene {
     this.merchantHoldStartedAt = null;
     this.merchantHoldComplete = false;
     this.merchantHoldDenied = false;
+    this.merchantRequiresSpaceRelease = false;
     this.merchantChargeOsc = null;
     this.merchantChargeGain = null;
     this.audioReady = false;
@@ -259,10 +261,11 @@ export class GameScene extends Phaser.Scene {
     this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(50);
     this.hud.add(this.add.rectangle(640, 28, 1280, 56, 0x08100f, 0.88));
     this.coinIcon = this.add.image(26, 28, "coin").setDisplaySize(24, 24);
-    this.coinText = this.add.text(48, 13, "", this.hudStyle("#e7d66b"));
+    this.coinText = this.add.text(48, 28, "", this.hudStyle("#e7d66b")).setOrigin(0, 0.5);
+    this.healthText = this.add.text(115, 28, "", this.hudStyle("#d65f4f")).setOrigin(0, 0.5);
     this.statusText = this.add.text(250, 13, "", this.hudStyle("#edf8ed"));
     this.promptText = this.add.text(820, 13, "", this.hudStyle("#d9e5d0"));
-    this.hud.add([this.coinIcon, this.coinText, this.statusText, this.promptText]);
+    this.hud.add([this.coinIcon, this.coinText, this.healthText, this.statusText, this.promptText]);
 
     this.toastText = this.add
       .text(640, 84, "", {
@@ -422,6 +425,10 @@ export class GameScene extends Phaser.Scene {
     const playerBounds = this.player.getBounds();
     this.nearMerchant = Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.merchantZone.getBounds());
     this.nearExit = Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.exitGate.getBounds());
+  }
+
+  isInMerchantSafeZone() {
+    return this.merchantZone && Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), this.merchantZone.getBounds());
   }
 
   updateQuiz(time) {
@@ -785,17 +792,13 @@ export class GameScene extends Phaser.Scene {
       const speedBonus = Math.round(remaining * 1.4);
       const multiplier = 1 + (this.answerStreak * 0.08);
       const earned = Math.round((this.tuning.reward + speedBonus) * multiplier);
-      this.coins += earned;
       this.answerStreak += 1;
       zone.setData("completed", true);
       zone.setFillStyle(0x3fa68f, 0.14);
       zone.setStrokeStyle(3, 0x3fa68f, 0.65);
 
-      if (remaining >= 10) {
-        this.grantFastBuff();
-      }
-
-      this.showToast(`Correct: +${earned} coins`);
+      this.coins += earned;
+      this.showToast(`Correct: +${earned}`);
       this.playTone("correct");
     } else {
       this.answerStreak = 0;
@@ -827,14 +830,14 @@ export class GameScene extends Phaser.Scene {
 
     if (buff === "speed") {
       this.tempBuffs.speedUntil = until;
-      this.showToast("Fast buff: speed boost");
+      return "speed boost";
     } else if (buff === "magnet") {
       this.tempBuffs.magnetUntil = until;
-      this.showToast("Fast buff: coin magnet");
-    } else {
-      this.tempBuffs.shieldUntil = until;
-      this.showToast("Fast buff: shield");
+      return "coin magnet";
     }
+
+    this.tempBuffs.shieldUntil = until;
+    return "shield";
   }
 
   addPenaltyHazard(x) {
@@ -902,6 +905,7 @@ export class GameScene extends Phaser.Scene {
   closeMerchant() {
     this.merchantOpen = false;
     this.resetMerchantHold();
+    this.merchantRequiresSpaceRelease = false;
     this.merchantRows = null;
     if (this.merchantUi) {
       this.merchantUi.destroy(true);
@@ -911,6 +915,13 @@ export class GameScene extends Phaser.Scene {
 
   updateMerchantInput(time) {
     if (!this.merchantOpen || !this.merchantRows) {
+      return;
+    }
+
+    if (this.merchantRequiresSpaceRelease) {
+      if (!this.cursors.space.isDown) {
+        this.merchantRequiresSpaceRelease = false;
+      }
       return;
     }
 
@@ -1064,20 +1075,21 @@ export class GameScene extends Phaser.Scene {
     this.playTone("buy");
     this.closeMerchant();
     this.openMerchant();
+    this.merchantRequiresSpaceRelease = true;
   }
 
-  endRun() {
+  endRun(title = "RUN COMPLETE") {
     this.runEnded = true;
     this.player.setVelocity(0, 0);
     this.add.rectangle(640, 360, 1280, 720, 0x07100f, 0.9).setScrollFactor(0).setDepth(100);
-    this.add.text(405, 180, "RUN COMPLETE", {
+    this.add.text(640, 205, title, {
       fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
       fontSize: "68px",
       color: "#e7d66b",
       stroke: "#101814",
       strokeThickness: 6
-    }).setScrollFactor(0).setDepth(101);
-    this.add.text(448, 288, `Coins banked: ${this.coins}\nDamage taken: ${this.damageTaken}\nDifficulty: ${this.difficulty.toUpperCase()}`, {
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+    this.add.text(448, 288, `Coins banked: ${this.coins}\nHealth left: ${this.health}/${this.maxHealth}\nDifficulty: ${this.difficulty.toUpperCase()}`, {
       fontFamily: "Cascadia Mono, Consolas, monospace",
       fontSize: "26px",
       color: "#edf8ed",
@@ -1102,6 +1114,10 @@ export class GameScene extends Phaser.Scene {
 
   takeDamage(source) {
     const time = this.time.now;
+    if (this.merchantOpen || this.isInMerchantSafeZone()) {
+      return;
+    }
+
     if (time - this.lastDamageAt < 900) {
       return;
     }
@@ -1117,17 +1133,21 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.damageTaken += 1;
-    this.coins = Math.max(0, this.coins - 4);
+    this.health = Math.max(0, this.health - 1);
     this.player.setVelocity(this.player.flipX ? 300 : -300, -430);
     this.cameras.main.shake(130, 0.01);
-    this.showToast(`${source} hit: -4 coins`);
+    this.showToast(`${source} hit: -1 HP`);
     this.playTone("hit");
     this.lastDamageAt = time;
+
+    if (this.health <= 0) {
+      this.endRun("DEFEATED");
+    }
   }
 
   updateHud() {
     this.coinText.setText(`${this.coins}`);
+    this.healthText.setText(`HP ${this.health}/${this.maxHealth}`);
 
     const buffs = [];
     if (this.upgrades.dash) buffs.push("Dash");
