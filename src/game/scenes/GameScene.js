@@ -1126,14 +1126,34 @@ export class GameScene extends Phaser.Scene {
       lineSpacing: 14
     }).setScrollFactor(0).setDepth(101);
 
-    const restart = this.add.rectangle(640, 500, 310, 62, 0xe7d66b).setScrollFactor(0).setDepth(101).setInteractive({ useHandCursor: true });
-    this.add.text(640, 500, "NEW RUN", {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: "34px",
-      color: "#07100f"
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
+    if (this.isEditorPlaytest) {
+      const playAgain = this.addEndRunButton(505, 500, 260, "PLAY AGAIN", 0xe7d66b, "#07100f");
+      const back = this.addEndRunButton(775, 500, 210, "BACK", 0x3fa68f, "#07100f");
+      playAgain.on("pointerdown", () => this.scene.start("GameScene"));
+      back.on("pointerdown", () => this.returnToLevelEditor());
+      this.input.keyboard.once("keydown-SPACE", () => this.scene.start("GameScene"));
+      this.input.keyboard.once("keydown-ESC", () => this.returnToLevelEditor());
+      return;
+    }
+
+    const restart = this.addEndRunButton(640, 500, 310, "NEW RUN", 0xe7d66b, "#07100f");
     restart.on("pointerdown", () => this.scene.start("MenuScene"));
     this.input.keyboard.once("keydown-SPACE", () => this.scene.start("MenuScene"));
+  }
+
+  addEndRunButton(x, y, width, label, fill, color) {
+    const button = this.add.rectangle(x, y, width, 62, fill).setScrollFactor(0).setDepth(101).setInteractive({ useHandCursor: true });
+    this.add.text(x, y, label, {
+      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
+      fontSize: label.length > 9 ? "30px" : "34px",
+      color
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
+    return button;
+  }
+
+  returnToLevelEditor() {
+    this.registry.remove("draftLevel");
+    this.scene.start("LevelEditorScene");
   }
 
   collectCoin(coin) {
