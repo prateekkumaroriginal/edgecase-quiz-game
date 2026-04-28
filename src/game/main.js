@@ -2,6 +2,9 @@ import Phaser from "phaser";
 import "../styles.css";
 import { MenuScene } from "./scenes/MenuScene.js";
 import { GameScene } from "./scenes/GameScene.js";
+import { LevelEditorScene } from "./scenes/LevelEditorScene.js";
+
+const isDev = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
 const config = {
   type: Phaser.AUTO,
@@ -27,7 +30,7 @@ const config = {
     antialiasGL: true,
     roundPixels: true
   },
-  scene: [MenuScene, GameScene]
+  scene: isDev ? [MenuScene, GameScene, LevelEditorScene] : [MenuScene, GameScene]
 };
 
 new Phaser.Game(config);

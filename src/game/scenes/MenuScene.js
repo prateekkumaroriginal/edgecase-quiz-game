@@ -1,92 +1,51 @@
+import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
+import { Pencil } from "lucide";
+
+const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
+
 export class MenuScene extends Phaser.Scene {
   constructor() {
     super("MenuScene");
   }
 
   create() {
-    this.registry.set("difficulty", "normal");
+    this.registry.set("difficulty", this.registry.get("difficulty") || "normal");
+    this.registry.set("selectedLevelId", this.registry.get("selectedLevelId") || DEFAULT_LEVEL_ID);
+    this.registry.remove("draftLevel");
+    this.registry.remove("editorDraft");
+    this.levels = this.getSelectableLevels();
+    this.editButtons = [];
     this.menuIndex = 1;
     this.cameras.main.setBackgroundColor("#07100f");
 
     this.add.rectangle(640, 360, 1280, 720, 0x07100f);
     this.add.rectangle(640, 575, 1280, 190, 0x152017);
     this.add.rectangle(640, 610, 1280, 18, 0xb9a44c);
-
     this.drawCircuitBackdrop();
 
     this.add
-      .text(92, 72, "EDGECASE", {
+      .text(92, 64, "EDGECASE", {
         fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-        fontSize: "96px",
+        fontSize: "88px",
         color: "#f2f8e8",
         stroke: "#101814",
         strokeThickness: 8
       })
       .setShadow(8, 8, "#1d5f52", 0, true, true);
 
-    this.add.text(100, 176, "TECH FIELD / PLATFORMER KNOWLEDGE RUN", {
+    this.add.text(100, 164, "TECH FIELD / PLATFORMER KNOWLEDGE RUN", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
       fontSize: "18px",
       color: "#d7c96d"
     });
 
-    this.add.text(100, 245, "Choose difficulty", {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "22px",
-      color: "#f2f8e8"
-    });
+    this.add.text(100, 230, "Difficulty", this.headingStyle());
+    this.add.text(465, 230, "Select level", this.headingStyle());
 
-    const difficulties = [
-      { id: "easy", label: "Easy", note: "Shorter gaps, easier questions" },
-      { id: "normal", label: "Normal", note: "Balanced rewards and hazards" },
-      { id: "hard", label: "Hard", note: "Hard questions, denser hazards" }
-    ];
-
-    this.buttons = difficulties.map((difficulty, index) => {
-      const y = 300 + index * 72;
-      const button = this.add
-        .rectangle(230, y, 260, 48, difficulty.id === "normal" ? 0xb9a44c : 0x22312b)
-        .setStrokeStyle(2, 0xe9eedc)
-        .setInteractive({ useHandCursor: true });
-
-      const label = this.add.text(122, y - 16, difficulty.label, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "22px",
-        color: difficulty.id === "normal" ? "#07100f" : "#f2f8e8"
-      });
-
-      const note = this.add.text(390, y - 12, difficulty.note, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "17px",
-        color: "#b8c7b5"
-      });
-
-      button.on("pointerover", () => {
-        this.menuIndex = index;
-        this.updateMenuFocus();
-      });
-      button.on("pointerdown", () => {
-        this.menuIndex = index;
-        this.selectDifficulty(difficulty.id);
-      });
-      return { id: difficulty.id, button, label, note };
-    });
-
-    const start = this.add
-      .rectangle(250, 565, 300, 62, 0xe7d66b)
-      .setStrokeStyle(3, 0x101814)
-      .setInteractive({ useHandCursor: true });
-    this.startButton = start;
-    this.startLabel = this.add.text(250, 565, "START RUN", {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: "34px",
-      color: "#07100f"
-    }).setOrigin(0.5);
-    start.on("pointerover", () => {
-      this.menuIndex = 3;
-      this.updateMenuFocus();
-    });
-    start.on("pointerdown", () => this.scene.start("GameScene"));
+    this.menuItems = [];
+    this.createDifficultyButtons();
+    this.createLevelButtons();
+    this.createActionButtons();
 
     this.add.text(100, 642, "A/D move  |  Space jump  |  E interact  |  Physical quiz answers use doors", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
@@ -94,7 +53,7 @@ export class MenuScene extends Phaser.Scene {
       color: "#d9e5d0"
     });
 
-    this.add.text(870, 98, "MVP BUILD", {
+    this.add.text(870, 98, IS_DEV ? "DEV BUILD" : "MVP BUILD", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
       fontSize: "20px",
       color: "#07100f",
@@ -102,7 +61,7 @@ export class MenuScene extends Phaser.Scene {
       padding: { x: 14, y: 8 }
     });
 
-    this.add.text(870, 150, "1 level\n3 challenge zones\n1 merchant\n4 upgrades\n16 tech questions", {
+    this.summaryText = this.add.text(870, 150, "", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
       fontSize: "20px",
       color: "#edf8ed",
@@ -117,25 +76,189 @@ export class MenuScene extends Phaser.Scene {
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER
     });
+    this.scale.on("resize", this.positionPencilButtons, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroyEditButtons());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.destroyEditButtons());
     this.updateMenuFocus();
+    this.updateSummary();
+  }
+
+  createDifficultyButtons() {
+    const difficulties = [
+      { id: "easy", label: "Easy", note: "Fewer hazards" },
+      { id: "normal", label: "Normal", note: "Balanced run" },
+      { id: "hard", label: "Hard", note: "Full pressure" }
+    ];
+
+    difficulties.forEach((difficulty, index) => {
+      const y = 282 + index * 60;
+      const rect = this.add.rectangle(230, y, 260, 44, 0x22312b).setStrokeStyle(2, 0xe9eedc).setInteractive({ useHandCursor: true });
+      const label = this.add.text(122, y - 15, difficulty.label, this.itemStyle("#f2f8e8"));
+      const note = this.add.text(390, y - 10, difficulty.note, {
+        fontFamily: "Cascadia Mono, Consolas, monospace",
+        fontSize: "15px",
+        color: "#b8c7b5"
+      });
+      const item = { type: "difficulty", id: difficulty.id, rect, label, note, select: () => this.selectDifficulty(difficulty.id) };
+      rect.on("pointerover", () => this.focusItem(item));
+      rect.on("pointerdown", item.select);
+      this.menuItems.push(item);
+    });
+  }
+
+  createLevelButtons() {
+    this.levels.forEach((level, index) => {
+      const y = 282 + index * 60;
+      const rect = this.add.rectangle(605, y, 285, 44, 0x22312b).setStrokeStyle(2, 0xe9eedc).setInteractive({ useHandCursor: true });
+      const label = this.add.text(480, y - 15, `${index + 1}. ${level.name}`, this.itemStyle("#f2f8e8"));
+      const item = { type: "level", id: level.id, rect, label, select: () => this.selectLevel(level.id) };
+      rect.on("pointerover", () => this.focusItem(item));
+      rect.on("pointerdown", item.select);
+      if (IS_DEV) {
+        const editButton = this.createPencilButton(rect.x + rect.displayWidth / 2 - 22, rect.y, level);
+        item.editButton = editButton;
+      }
+      this.menuItems.push(item);
+    });
+  }
+
+  createPencilButton(x, y, level) {
+    const host = document.getElementById("game-root") || document.body;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-label", `Edit ${level.name}`);
+    button.className = "pointer-events-auto absolute z-20 grid h-8 w-8 place-items-center rounded-sm border border-[#385346] bg-[#102019] text-[#edf8ed] transition-colors hover:border-[#f4e786] hover:bg-[#21372e] hover:text-[#f4e786]";
+    button.innerHTML = this.lucideSvg(Pencil, 16);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.editLevel(level.id);
+    });
+    host.appendChild(button);
+    this.editButtons.push({ button, x, y });
+    this.positionPencilButton(button, x, y);
+    return button;
+  }
+
+  positionPencilButton(button, x, y) {
+    const host = document.getElementById("game-root") || document.body;
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const scaleX = canvasRect.width / this.scale.width;
+    const scaleY = canvasRect.height / this.scale.height;
+    const left = canvasRect.left - hostRect.left + x * scaleX - 16;
+    const top = canvasRect.top - hostRect.top + y * scaleY - 16;
+    button.style.left = `${left}px`;
+    button.style.top = `${top}px`;
+  }
+
+  positionPencilButtons() {
+    this.editButtons?.forEach(({ button, x, y }) => this.positionPencilButton(button, x, y));
+  }
+
+  createActionButtons() {
+    const actions = [
+      { label: "START RUN", x: 250, y: 560, width: 300, action: () => this.startRun() }
+    ];
+
+    if (IS_DEV) {
+      actions.push({ label: "LEVEL MAKER", x: 610, y: 560, width: 320, action: () => this.scene.start("LevelEditorScene") });
+    }
+
+    actions.forEach((action) => {
+      const rect = this.add.rectangle(action.x, action.y, action.width, 62, 0xe7d66b).setStrokeStyle(3, 0x101814).setInteractive({ useHandCursor: true });
+      const label = this.add.text(action.x, action.y, action.label, {
+        fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
+        fontSize: "34px",
+        color: "#07100f"
+      }).setOrigin(0.5);
+      const item = { type: "action", rect, label, select: action.action };
+      rect.on("pointerover", () => this.focusItem(item));
+      rect.on("pointerdown", item.select);
+      this.menuItems.push(item);
+    });
   }
 
   update() {
     if (Phaser.Input.Keyboard.JustDown(this.keys.up) || Phaser.Input.Keyboard.JustDown(this.keys.w)) {
-      this.menuIndex = Phaser.Math.Wrap(this.menuIndex - 1, 0, 4);
+      this.menuIndex = Phaser.Math.Wrap(this.menuIndex - 1, 0, this.menuItems.length);
       this.updateMenuFocus();
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.down) || Phaser.Input.Keyboard.JustDown(this.keys.s)) {
-      this.menuIndex = Phaser.Math.Wrap(this.menuIndex + 1, 0, 4);
+      this.menuIndex = Phaser.Math.Wrap(this.menuIndex + 1, 0, this.menuItems.length);
       this.updateMenuFocus();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.space) || Phaser.Input.Keyboard.JustDown(this.keys.enter)) {
-      if (this.menuIndex === 3) {
-        this.scene.start("GameScene");
-      } else {
-        this.selectDifficulty(this.buttons[this.menuIndex].id);
-      }
+      this.menuItems[this.menuIndex].select();
     }
+  }
+
+  focusItem(item) {
+    this.menuIndex = this.menuItems.indexOf(item);
+    this.updateMenuFocus();
+  }
+
+  startRun() {
+    this.registry.remove("draftLevel");
+    this.scene.start("GameScene");
+  }
+
+  selectDifficulty(id) {
+    this.registry.set("difficulty", id);
+    this.updateMenuFocus();
+    this.updateSummary();
+  }
+
+  selectLevel(id) {
+    this.registry.set("selectedLevelId", id);
+    this.updateMenuFocus();
+    this.updateSummary();
+  }
+
+  editLevel(id) {
+    const level = this.levels.find((item) => item.id === id);
+    if (!level) return;
+    this.registry.set("editorDraft", structuredClone(level));
+    this.scene.start("LevelEditorScene");
+  }
+
+  updateMenuFocus() {
+    const selectedDifficulty = this.registry.get("difficulty");
+    const selectedLevelId = this.registry.get("selectedLevelId");
+
+    this.menuItems.forEach((item, index) => {
+      const focused = this.menuIndex === index;
+      if (item.type === "difficulty") {
+        const selected = selectedDifficulty === item.id;
+        item.rect.setFillStyle(selected ? 0xb9a44c : 0x22312b);
+        item.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
+        item.label.setColor(selected ? "#07100f" : "#f2f8e8");
+      } else if (item.type === "level") {
+        const selected = selectedLevelId === item.id;
+        item.rect.setFillStyle(selected ? 0x2f5546 : 0x22312b);
+        item.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
+        item.label.setColor(selected ? "#f4e786" : "#f2f8e8");
+      } else {
+        item.rect.setStrokeStyle(focused ? 5 : 3, focused ? 0xf4e786 : 0x101814);
+      }
+    });
+  }
+
+  updateSummary() {
+    const level = this.levels.find((item) => item.id === this.registry.get("selectedLevelId")) || this.levels[0];
+    this.summaryText.setText(`${this.levels.length} selectable level${this.levels.length === 1 ? "" : "s"}\n${level.name}\n${level.challenges.length} challenge zones\n1 merchant\n4 upgrades\n16 tech questions`);
+  }
+
+  getSelectableLevels() {
+    if (!IS_DEV) {
+      return LEVELS;
+    }
+
+    const devSavedLevels = this.registry.get("devSavedLevels") || [];
+    const levelsById = new Map(LEVELS.map((level) => [level.id, level]));
+    for (const level of devSavedLevels) {
+      levelsById.set(level.id, level);
+    }
+    return Array.from(levelsById.values());
   }
 
   drawCircuitBackdrop() {
@@ -151,26 +274,39 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
-  selectDifficulty(id) {
-    this.registry.set("difficulty", id);
-
-    for (const item of this.buttons) {
-      const selected = item.id === id;
-      item.button.setFillStyle(selected ? 0xb9a44c : 0x22312b);
-      item.label.setColor(selected ? "#07100f" : "#f2f8e8");
-    }
-
-    this.updateMenuFocus();
+  headingStyle() {
+    return {
+      fontFamily: "Cascadia Mono, Consolas, monospace",
+      fontSize: "22px",
+      color: "#f2f8e8"
+    };
   }
 
-  updateMenuFocus() {
-    this.buttons.forEach((item, index) => {
-      const focused = this.menuIndex === index;
-      item.button.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
-    });
+  itemStyle(color) {
+    return {
+      fontFamily: "Cascadia Mono, Consolas, monospace",
+      fontSize: "20px",
+      color
+    };
+  }
 
-    if (this.startButton) {
-      this.startButton.setStrokeStyle(this.menuIndex === 3 ? 5 : 3, this.menuIndex === 3 ? 0xf4e786 : 0x101814);
-    }
+  lucideSvg(icon, size) {
+    const children = icon
+      .map(([tag, attrs]) => {
+        const attrText = Object.entries(attrs)
+          .map(([key, value]) => `${key}="${String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"`)
+          .join(" ");
+        return `<${tag} ${attrText}></${tag}>`;
+      })
+      .join("");
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${children}</svg>`;
+  }
+
+  destroyEditButtons() {
+    this.scale?.off("resize", this.positionPencilButtons, this);
+    this.menuItems?.forEach((item) => item.editButton?.remove());
+    this.editButtons?.forEach((item) => item.button.remove());
+    this.editButtons = [];
   }
 }

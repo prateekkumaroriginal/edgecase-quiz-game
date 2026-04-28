@@ -57,7 +57,10 @@
     }
   },
   "dependencies": {
-    "phaser": "^3.90.0"
+    "@tailwindcss/vite": "^4.2.4",
+    "lucide": "^1.11.0",
+    "phaser": "^3.90.0",
+    "tailwindcss": "^4.2.4"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

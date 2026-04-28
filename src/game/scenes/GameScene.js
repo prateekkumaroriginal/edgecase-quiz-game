@@ -1,9 +1,9 @@
 import { QUESTIONS } from "../data/questions.js";
 import { UPGRADES } from "../data/upgrades.js";
+import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
 
-const WORLD_WIDTH = 4300;
-const FLOOR_Y = 652;
 const CHALLENGE_SECONDS = 18;
+const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
 const DIFFICULTY = {
   easy: { reward: 24, enemySpeed: 75, hazardCount: 4, questionMix: ["easy", "easy", "medium"] },
@@ -18,7 +18,11 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.difficulty = this.registry.get("difficulty") || "normal";
+    this.isEditorPlaytest = Boolean(this.registry.get("draftLevel"));
     this.tuning = DIFFICULTY[this.difficulty];
+    this.level = this.getActiveLevel();
+    this.worldWidth = this.level.worldWidth || 4300;
+    this.floorY = this.level.floorY || 652;
     this.coins = 0;
     this.maxHealth = 3;
     this.health = this.maxHealth;
@@ -66,8 +70,24 @@ export class GameScene extends Phaser.Scene {
     this.createInputs();
 
     this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, 720);
-    this.physics.world.setBounds(0, 0, WORLD_WIDTH, 720);
+    this.cameras.main.setBounds(0, 0, this.worldWidth, 720);
+    this.physics.world.setBounds(0, 0, this.worldWidth, 720);
+  }
+
+  getActiveLevel() {
+    const draftLevel = this.registry.get("draftLevel");
+    if (draftLevel) {
+      return structuredClone(draftLevel);
+    }
+
+    const selectedLevelId = this.registry.get("selectedLevelId") || DEFAULT_LEVEL_ID;
+    const devSavedLevels = IS_DEV ? this.registry.get("devSavedLevels") || [] : [];
+    const levelsById = new Map(LEVELS.map((item) => [item.id, item]));
+    for (const item of devSavedLevels) {
+      levelsById.set(item.id, item);
+    }
+    const level = levelsById.get(selectedLevelId) || LEVELS[0];
+    return structuredClone(level);
   }
 
   createTextures() {
@@ -112,45 +132,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   createWorld() {
-    this.add.rectangle(WORLD_WIDTH / 2, 360, WORLD_WIDTH, 720, 0x07100f);
+    this.add.rectangle(this.worldWidth / 2, 360, this.worldWidth, 720, 0x07100f);
     this.drawParallaxBands();
 
     this.platforms = this.physics.add.staticGroup();
-    this.addPlatform(WORLD_WIDTH / 2, FLOOR_Y + 32, WORLD_WIDTH, 64);
-    this.addPlatform(340, 520, 220, 34);
-    this.addPlatform(670, 440, 220, 34);
-    this.addPlatform(1030, 535, 300, 34);
-    this.addPlatform(1420, 455, 230, 34);
-    this.addPlatform(1760, 555, 270, 34);
-    this.addPlatform(2150, 475, 240, 34);
-    this.addPlatform(2600, 548, 320, 34);
-    this.addPlatform(3040, 460, 240, 34);
-    this.addPlatform(3380, 540, 270, 34);
-    this.addPlatform(3760, 438, 230, 34);
+    for (const platform of this.level.platforms || []) {
+      this.addPlatform(platform.x, platform.y, platform.width, platform.height);
+    }
 
-    this.add.text(90, 585, "START", this.signStyle()).setDepth(3);
-    this.add.text(2240, 585, "MERCHANT SAFE ZONE", this.signStyle()).setDepth(3);
-    this.add.text(3910, 585, "EXIT RUN", this.signStyle()).setDepth(3);
+    for (const sign of this.level.signs || []) {
+      this.add.text(sign.x, sign.y, sign.text, this.signStyle()).setDepth(3);
+    }
   }
 
   drawParallaxBands() {
     const graphics = this.add.graphics();
     graphics.fillStyle(0x0f1a18, 1);
-    graphics.fillRect(0, 508, WORLD_WIDTH, 144);
+    graphics.fillRect(0, 508, this.worldWidth, 144);
     graphics.fillStyle(0x16251f, 1);
-    for (let x = 0; x < WORLD_WIDTH; x += 180) {
+    for (let x = 0; x < this.worldWidth; x += 180) {
       const height = 80 + ((x / 180) % 4) * 34;
       graphics.fillRect(x, 508 - height, 92, height);
       graphics.fillRect(x + 110, 508 - height * 0.7, 54, height * 0.7);
     }
     graphics.lineStyle(2, 0x385346, 0.45);
-    for (let x = 0; x < WORLD_WIDTH; x += 120) {
+    for (let x = 0; x < this.worldWidth; x += 120) {
       graphics.strokeLineShape(new Phaser.Geom.Line(x, 510, x + 90, 470));
     }
   }
 
   createPlayer() {
-    this.player = this.physics.add.sprite(90, 560, "player");
+    const spawn = this.level.playerSpawn || { x: 90, y: 560 };
+    this.player = this.physics.add.sprite(spawn.x, spawn.y, "player");
     this.player.setCollideWorldBounds(true);
     this.player.setDragX(1550);
     this.player.setMaxVelocity(420, 920);
@@ -165,16 +178,11 @@ export class GameScene extends Phaser.Scene {
 
   createCollectibles() {
     this.coinGroup = this.physics.add.group({ allowGravity: false, immovable: true });
-    const coinPoints = [
-      [345, 475], [440, 475], [640, 395], [720, 395], [1110, 490], [1370, 410],
-      [1490, 410], [1830, 510], [2110, 430], [2195, 430], [2670, 505], [2780, 505],
-      [3060, 415], [3150, 415], [3440, 495], [3550, 495], [3770, 394], [3860, 394]
-    ];
 
-    for (const [x, y] of coinPoints) {
-      const coin = this.coinGroup.create(x, y, "coin");
+    for (const item of this.level.coins || []) {
+      const coin = this.coinGroup.create(item.x, item.y, "coin");
       coin.body.setCircle(12);
-      coin.setData("value", 3);
+      coin.setData("value", item.value || 3);
     }
 
     this.physics.add.overlap(this.player, this.coinGroup, (_, coin) => this.collectCoin(coin));
@@ -182,22 +190,15 @@ export class GameScene extends Phaser.Scene {
 
   createHazardsAndEnemies() {
     this.hazards = this.physics.add.staticGroup();
-    const spikes = [
-      [790, FLOOR_Y - 14], [830, FLOOR_Y - 14], [1580, FLOOR_Y - 14], [1620, FLOOR_Y - 14],
-      [2860, FLOOR_Y - 14], [2900, FLOOR_Y - 14], [3320, FLOOR_Y - 14], [3980, FLOOR_Y - 14]
-    ].slice(0, this.tuning.hazardCount);
+    const spikes = (this.level.hazards || []).slice(0, this.tuning.hazardCount);
 
-    for (const [x, y] of spikes) {
-      const spike = this.hazards.create(x, y, "spike");
+    for (const hazard of spikes) {
+      const spike = this.hazards.create(hazard.x, hazard.y, "spike");
       spike.refreshBody();
     }
 
     this.enemies = this.physics.add.group({ allowGravity: true });
-    const patrols = [
-      { x: 1210, y: 600, min: 1050, max: 1320 },
-      { x: 2350, y: 600, min: 2250, max: 2490 },
-      { x: 3560, y: 600, min: 3380, max: 3700 }
-    ];
+    const patrols = this.level.enemies || [];
 
     for (const patrol of patrols.slice(0, this.difficulty === "easy" ? 1 : 3)) {
       const enemy = this.enemies.create(patrol.x, patrol.y, "enemy");
@@ -216,41 +217,51 @@ export class GameScene extends Phaser.Scene {
   createChallenges() {
     this.challengeZones = [];
     const questionLevels = this.tuning.questionMix;
-    const positions = [
-      { x: 920, y: 585, label: "CHALLENGE 01" },
-      { x: 1980, y: 585, label: "CHALLENGE 02" },
-      { x: 3260, y: 585, label: "CHALLENGE 03" }
-    ];
+    const positions = this.level.challenges || [];
 
     positions.forEach((pos, index) => {
       const zone = this.add
-        .rectangle(pos.x, pos.y, 170, 110, 0x2d7f6d, 0.22)
+        .rectangle(pos.x, pos.y, pos.width || 170, pos.height || 110, 0x2d7f6d, 0.22)
         .setStrokeStyle(3, 0xd8cd6c, 0.85);
       this.physics.add.existing(zone, true);
       zone.setData("id", index);
       zone.setData("locked", false);
       zone.setData("completed", false);
-      zone.setData("question", this.pickQuestion(questionLevels[index], index));
+      zone.setData("question", this.pickQuestion(pos.difficulty || questionLevels[index] || "easy", index));
       this.challengeZones.push(zone);
 
-      this.add.text(pos.x - 78, pos.y - 83, pos.label, this.signStyle()).setDepth(3);
+      this.add.text(pos.x - 78, pos.y - 83, pos.label || `CHALLENGE ${String(index + 1).padStart(2, "0")}`, this.signStyle()).setDepth(3);
       this.physics.add.overlap(this.player, zone, () => this.tryStartChallenge(zone));
     });
   }
 
   createMerchant() {
-    this.merchantZone = this.add.rectangle(2420, 590, 240, 120, 0x345347, 0.25).setStrokeStyle(3, 0xe7d66b);
+    const merchant = this.level.merchant;
+    if (!merchant) {
+      this.merchantZone = null;
+      return;
+    }
+
+    this.merchantZone = this.add.rectangle(merchant.x, merchant.y, merchant.width, merchant.height, 0x345347, 0.25).setStrokeStyle(3, 0xe7d66b);
     this.physics.add.existing(this.merchantZone, true);
     this.physics.add.overlap(this.player, this.merchantZone, () => {
       this.nearMerchant = true;
     });
 
-    this.add.rectangle(2420, 579, 60, 86, 0x26372d).setStrokeStyle(3, 0xd8cd6c);
-    this.add.text(2393, 528, "NPC", this.signStyle()).setDepth(3);
+    const npcX = merchant.npcX || merchant.x;
+    const npcY = merchant.npcY || merchant.y - 11;
+    this.add.rectangle(npcX, npcY, 60, 86, 0x26372d).setStrokeStyle(3, 0xd8cd6c);
+    this.add.text(npcX - 27, npcY - 51, "NPC", this.signStyle()).setDepth(3);
   }
 
   createExitGate() {
-    this.exitGate = this.add.rectangle(4070, 582, 115, 138, 0x8a7440, 0.58).setStrokeStyle(4, 0xe7d66b);
+    const gate = this.level.exitGate;
+    if (!gate) {
+      this.exitGate = null;
+      return;
+    }
+
+    this.exitGate = this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x8a7440, 0.58).setStrokeStyle(4, 0xe7d66b);
     this.physics.add.existing(this.exitGate, true);
     this.physics.add.overlap(this.player, this.exitGate, () => {
       this.nearExit = true;
@@ -423,8 +434,8 @@ export class GameScene extends Phaser.Scene {
 
   updateProximity() {
     const playerBounds = this.player.getBounds();
-    this.nearMerchant = Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.merchantZone.getBounds());
-    this.nearExit = Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.exitGate.getBounds());
+    this.nearMerchant = this.merchantZone ? Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.merchantZone.getBounds()) : false;
+    this.nearExit = this.exitGate ? Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, this.exitGate.getBounds()) : false;
   }
 
   isInMerchantSafeZone() {
@@ -465,6 +476,12 @@ export class GameScene extends Phaser.Scene {
 
   togglePause() {
     this.ensureAudio();
+
+    if (this.isEditorPlaytest) {
+      this.registry.remove("draftLevel");
+      this.scene.start("LevelEditorScene");
+      return;
+    }
 
     if (this.paused) {
       this.paused = false;
@@ -841,7 +858,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   addPenaltyHazard(x) {
-    const spike = this.hazards.create(x, FLOOR_Y - 14, "spike");
+    const spike = this.hazards.create(x, this.floorY - 14, "spike");
     spike.refreshBody();
   }
 
@@ -1080,7 +1097,20 @@ export class GameScene extends Phaser.Scene {
 
   endRun(title = "RUN COMPLETE") {
     this.runEnded = true;
+    this.merchantOpen = false;
+    this.nearMerchant = false;
+    this.nearExit = false;
+    this.quiz = null;
+    this.player.setAccelerationX(0);
     this.player.setVelocity(0, 0);
+    if (this.player.body) {
+      this.player.body.enable = false;
+    }
+    if (this.enemies) {
+      for (const enemy of this.enemies.getChildren()) {
+        enemy.setVelocity(0, 0);
+      }
+    }
     this.add.rectangle(640, 360, 1280, 720, 0x07100f, 0.9).setScrollFactor(0).setDepth(100);
     this.add.text(640, 205, title, {
       fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
