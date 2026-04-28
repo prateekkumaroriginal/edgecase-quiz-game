@@ -158,6 +158,13 @@ export class LevelEditorScene extends Phaser.Scene {
       </aside>
     `;
     host.appendChild(this.hudRoot);
+    ["keydown", "keyup", "keypress"].forEach((eventName) => {
+      this.hudRoot.addEventListener(eventName, (event) => {
+        if (this.isEditableDomTarget(event.target)) {
+          event.stopPropagation();
+        }
+      });
+    });
 
     this.toolListEl = this.hudRoot.querySelector("[data-tools]");
     this.inspectorEl = this.hudRoot.querySelector("[data-inspector]");
@@ -195,6 +202,10 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.isTypingInDomField()) {
+      return;
+    }
+
     const speed = 16;
     const maxScroll = Math.max(0, WORLD_WIDTH - this.cameras.main.width);
     if (this.keys.left.isDown) {
@@ -218,6 +229,17 @@ export class LevelEditorScene extends Phaser.Scene {
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.p)) {
       this.playtest();
     }
+  }
+
+  isTypingInDomField() {
+    return this.isEditableDomTarget(document.activeElement);
+  }
+
+  isEditableDomTarget(target) {
+    return target instanceof HTMLElement && (
+      target.matches("input, textarea, select") ||
+      target.isContentEditable
+    );
   }
 
   onPointerDown(pointer) {

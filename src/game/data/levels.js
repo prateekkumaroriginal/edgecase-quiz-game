@@ -273,8 +273,8 @@ export const LEVELS = [
     worldWidth: 4300,
     floorY: 652,
     playerSpawn: {
-      x: 57,
-      y: 510
+      x: 260,
+      y: 500
     },
     platforms: [
       {
@@ -284,147 +284,20 @@ export const LEVELS = [
         height: 64
       },
       {
-        x: 310,
-        y: 560,
-        width: 220,
-        height: 30
-      },
-      {
-        x: 910,
-        y: 560,
-        width: 220,
-        height: 30
-      },
-      {
-        x: 2210,
-        y: 560,
-        width: 220,
-        height: 30
-      },
-      {
-        x: 1890,
-        y: 460,
-        width: 220,
-        height: 34
-      },
-      {
-        x: 1490,
+        x: 320,
         y: 260,
         width: 220,
         height: 34
       }
     ],
-    coins: [
-      {
-        x: 250,
-        y: 520
-      },
-      {
-        x: 370,
-        y: 520
-      },
-      {
-        x: 850,
-        y: 520
-      },
-      {
-        x: 970,
-        y: 520
-      },
-      {
-        x: 2120,
-        y: 490
-      },
-      {
-        x: 1040,
-        y: 600
-      },
-      {
-        x: 1080,
-        y: 600
-      },
-      {
-        x: 1830,
-        y: 420
-      },
-      {
-        x: 1900,
-        y: 420
-      },
-      {
-        x: 1970,
-        y: 420
-      }
-    ],
-    hazards: [
-      {
-        x: 1040,
-        y: 640
-      },
-      {
-        x: 1080,
-        y: 640
-      },
-      {
-        x: 2120,
-        y: 530
-      }
-    ],
-    enemies: [
-      {
-        x: 450,
-        y: 610,
-        min: 330,
-        max: 570
-      },
-      {
-        x: 1300,
-        y: 610,
-        min: 1180,
-        max: 1420
-      },
-      {
-        x: 1600,
-        y: 610,
-        min: 1480,
-        max: 1720
-      },
-      {
-        x: 1900,
-        y: 610,
-        min: 1780,
-        max: 2020
-      }
-    ],
-    challenges: [
-      {
-        x: 610,
-        y: 590,
-        width: 170,
-        height: 110,
-        label: "CHALLENGE 01",
-        difficulty: "hard"
-      },
-      {
-        x: 2590,
-        y: 540,
-        width: 170,
-        height: 110,
-        label: "CHALLENGE 02",
-        difficulty: "medium"
-      }
-    ],
-    merchant: {
-      x: 3020,
-      y: 590,
-      width: 240,
-      height: 120,
-      npcX: 2870,
-      npcY: 559
-    },
+    coins: [],
+    hazards: [],
+    enemies: [],
+    challenges: [],
+    merchant: null,
     exitGate: {
-      x: 1490,
-      y: 170,
+      x: 440,
+      y: 570,
       width: 115,
       height: 138
     },
@@ -588,6 +461,36 @@ export const LEVELS = [
     exitGate: {
       x: 1490,
       y: 170,
+      width: 115,
+      height: 138
+    },
+    signs: []
+  },
+  {
+    id: "new-level-ewoifnw123",
+    name: "New Level ewoifnw123",
+    worldWidth: 4300,
+    floorY: 652,
+    playerSpawn: {
+      x: 180,
+      y: 490
+    },
+    platforms: [
+      {
+        x: 2150,
+        y: 684,
+        width: 4300,
+        height: 64
+      }
+    ],
+    coins: [],
+    hazards: [],
+    enemies: [],
+    challenges: [],
+    merchant: null,
+    exitGate: {
+      x: 600,
+      y: 490,
       width: 115,
       height: 138
     },

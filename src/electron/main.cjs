@@ -49,6 +49,11 @@ function formatLevelValue(value, indent = 0) {
 function installDevLevelHandlers() {
   if (!isDev) return;
 
+  ipcMain.handle("edgecase:load-levels", async () => {
+    const { levels } = readLevelsSource();
+    return levels;
+  });
+
   ipcMain.handle("edgecase:save-level", async (_event, level) => {
     if (!level || typeof level !== "object") {
       throw new Error("Invalid level payload.");

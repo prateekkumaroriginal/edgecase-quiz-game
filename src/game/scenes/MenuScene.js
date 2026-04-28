@@ -15,6 +15,7 @@ export class MenuScene extends Phaser.Scene {
     this.registry.remove("editorDraft");
     this.levels = this.getSelectableLevels();
     this.editButtons = [];
+    this.menuItems = [];
     this.menuIndex = 1;
     this.cameras.main.setBackgroundColor("#07100f");
 
@@ -42,10 +43,7 @@ export class MenuScene extends Phaser.Scene {
     this.add.text(100, 230, "Difficulty", this.headingStyle());
     this.add.text(465, 230, "Select level", this.headingStyle());
 
-    this.menuItems = [];
-    this.createDifficultyButtons();
-    this.createLevelButtons();
-    this.createActionButtons();
+    this.createMenuButtons();
 
     this.add.text(100, 642, "A/D move  |  Space jump  |  E interact  |  Physical quiz answers use doors", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
@@ -81,6 +79,13 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.destroyEditButtons());
     this.updateMenuFocus();
     this.updateSummary();
+    this.refreshDevLevelsFromDisk();
+  }
+
+  createMenuButtons() {
+    this.createDifficultyButtons();
+    this.createLevelButtons();
+    this.createActionButtons();
   }
 
   createDifficultyButtons() {
@@ -176,6 +181,54 @@ export class MenuScene extends Phaser.Scene {
       rect.on("pointerdown", item.select);
       this.menuItems.push(item);
     });
+  }
+
+  async refreshDevLevelsFromDisk() {
+    if (!IS_DEV || !window.edgecase?.loadLevels) {
+      return;
+    }
+
+    try {
+      const levels = await window.edgecase.loadLevels();
+      if (!this.scene.isActive()) {
+        return;
+      }
+      if (!Array.isArray(levels) || !levels.length) {
+        return;
+      }
+
+      this.registry.set("devSavedLevels", levels);
+      const selectedLevelId = this.registry.get("selectedLevelId");
+      if (!levels.some((level) => level.id === selectedLevelId)) {
+        this.registry.set("selectedLevelId", levels[0].id);
+      }
+
+      this.levels = this.getSelectableLevels();
+      this.rebuildMenuButtons();
+      this.updateMenuFocus();
+      this.updateSummary();
+    } catch (error) {
+      console.warn("Could not refresh dev levels", error);
+    }
+  }
+
+  rebuildMenuButtons() {
+    const selectedItem = this.menuItems[this.menuIndex];
+    const selectedType = selectedItem?.type;
+    const selectedId = selectedItem?.id;
+    this.menuItems.forEach((item) => {
+      item.rect?.destroy();
+      item.label?.destroy();
+      item.note?.destroy();
+      item.editButton?.remove();
+    });
+    this.destroyEditButtons();
+    this.menuItems = [];
+    this.editButtons = [];
+    this.createMenuButtons();
+
+    const nextIndex = this.menuItems.findIndex((item) => item.type === selectedType && (!selectedId || item.id === selectedId));
+    this.menuIndex = nextIndex >= 0 ? nextIndex : Math.min(this.menuIndex, this.menuItems.length - 1);
   }
 
   update() {
