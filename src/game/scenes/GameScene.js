@@ -248,10 +248,10 @@ export class GameScene extends Phaser.Scene {
       this.nearMerchant = true;
     });
 
-    const npcX = merchant.npcX || merchant.x;
-    const npcY = merchant.npcY || merchant.y - 11;
-    this.add.rectangle(npcX, npcY, 60, 86, 0x26372d).setStrokeStyle(3, 0xd8cd6c);
-    this.add.text(npcX - 27, npcY - 51, "NPC", this.signStyle()).setDepth(3);
+    this.add
+      .text(merchant.x, merchant.y - merchant.height / 2 - 8, "MERCHANT", this.signStyle())
+      .setOrigin(0.5, 1)
+      .setDepth(3);
   }
 
   createExitGate() {

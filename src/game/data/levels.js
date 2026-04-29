@@ -519,7 +519,7 @@ export const LEVELS = [
     merchant: null,
     exitGate: {
       x: 600,
-      y: 490,
+      y: 480,
       width: 115,
       height: 138
     },

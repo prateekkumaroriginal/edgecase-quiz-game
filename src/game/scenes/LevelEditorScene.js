@@ -84,7 +84,7 @@ export class LevelEditorScene extends Phaser.Scene {
   makeDraftLevel() {
     const retainedDraft = this.registry.get("editorDraft");
     if (retainedDraft) {
-      return structuredClone(retainedDraft);
+      return this.stripFixedGround(structuredClone(retainedDraft));
     }
 
     return this.createBlankLevel();
@@ -137,14 +137,6 @@ export class LevelEditorScene extends Phaser.Scene {
           LEVEL NAME
           <input data-level-name type="text" value="${this.escapeHtml(this.draft.name)}" class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]" />
         </label>
-        <div data-save-status class="mt-3 rounded-sm border border-[#385346] bg-[#0d1a16] px-3 py-2 text-xs font-bold text-[#d65f4f]">UNSAVED</div>
-        <label class="mt-4 flex flex-col gap-1 text-xs font-bold text-[#8fa89d]">
-          EDIT EXISTING
-          <select data-edit-level class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]">
-            <option value="">Blank draft</option>
-            ${this.getEditableLevels().map((level) => `<option value="${this.escapeHtml(level.id)}" ${level.id === this.draft.id ? "selected" : ""}>${this.escapeHtml(level.name)}</option>`).join("")}
-          </select>
-        </label>
         <div data-tools class="mt-5 flex flex-col gap-2"></div>
       </aside>
       <aside data-right-panel class="pointer-events-auto absolute right-0 top-0 flex h-full w-[245px] flex-col border-l border-[#385346] bg-[#06100e]/95 p-4 shadow-[-18px_0_36px_rgba(0,0,0,0.35)]">
@@ -155,10 +147,11 @@ export class LevelEditorScene extends Phaser.Scene {
           <button data-action="exit" class="rounded-sm border border-[#7b332d] bg-[#d65f4f] px-3 py-2 text-sm font-bold text-[#07100f] transition-colors hover:border-[#f07b6e] hover:bg-[#f07b6e]">EXIT</button>
           <button data-action="save" class="rounded-sm border border-[#b9a44c] bg-[#e7d66b] px-3 py-2 text-sm font-bold text-[#07100f] transition-colors hover:border-[#f4e786] hover:bg-[#f4e786]">SAVE</button>
         </div>
-        <button data-action="playtest" class="mt-3 flex w-full items-center justify-center gap-3 rounded-sm border border-[#6ad8b4] bg-[#3fa68f] px-3 py-3 text-base font-bold text-[#07100f] transition-colors hover:border-[#8ee0c6] hover:bg-[#62cba8]">
+        <button data-action="playtest" class="mt-2 flex w-full items-center justify-center gap-3 rounded-sm border border-[#6ad8b4] bg-[#3fa68f] px-3 py-3 text-base font-bold text-[#07100f] transition-colors hover:border-[#8ee0c6] hover:bg-[#62cba8]">
           <span class="inline-block h-0 w-0 border-y-[8px] border-l-[13px] border-y-transparent border-l-[#07100f]"></span>
           <span>PLAYTEST</span>
         </button>
+        <div data-save-status class="mt-2 rounded-sm border border-[#385346] bg-[#0d1a16] px-3 py-2 text-xs font-bold text-[#d65f4f]">UNSAVED</div>
       </aside>
     `;
     host.appendChild(this.hudRoot);
@@ -175,12 +168,10 @@ export class LevelEditorScene extends Phaser.Scene {
     this.messageEl = this.hudRoot.querySelector("[data-message]");
     this.statusEl = this.hudRoot.querySelector("[data-save-status]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
-    this.editLevelEl = this.hudRoot.querySelector("[data-edit-level]");
     this.nameInputEl.addEventListener("input", () => {
       this.draft.name = this.nameInputEl.value;
       this.markDirty();
     });
-    this.editLevelEl.addEventListener("change", () => this.loadEditableLevel(this.editLevelEl.value));
 
     TOOL_DEFS.forEach((tool) => {
       const button = document.createElement("button");
@@ -202,7 +193,8 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot.querySelector("[data-action='playtest']").addEventListener("click", () => this.playtest());
     this.updateToolButtons();
     this.renderInspector();
-    this.markDirty();
+    this.savedSnapshot = this.serializeDraft();
+    this.updateSaveStatus();
   }
 
   update() {
@@ -246,7 +238,14 @@ export class LevelEditorScene extends Phaser.Scene {
     );
   }
 
+  blurActiveDomField() {
+    if (this.isEditableDomTarget(document.activeElement)) {
+      document.activeElement.blur();
+    }
+  }
+
   onPointerDown(pointer) {
+    this.blurActiveDomField();
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) return;
 
@@ -682,7 +681,6 @@ export class LevelEditorScene extends Phaser.Scene {
       this.registry.set("selectedLevelId", saved.id);
       this.savedSnapshot = this.serializeDraft();
       this.updateSaveStatus();
-      this.refreshEditableLevelOptions();
       this.showMessage("Saved permanently.");
     } catch (error) {
       this.showMessage(error?.message || "Could not save level.");
@@ -747,34 +745,6 @@ export class LevelEditorScene extends Phaser.Scene {
     return Array.from(levelsById.values());
   }
 
-  loadEditableLevel(id) {
-    if (!id) {
-      this.draft = this.createBlankLevel();
-    } else {
-      const level = this.getEditableLevels().find((item) => item.id === id);
-      if (!level) return;
-      this.draft = this.stripFixedGround(structuredClone(level));
-    }
-
-    this.selected = null;
-    this.activeTool = null;
-    this.savedSnapshot = this.serializeDraft();
-    this.nameInputEl.value = this.draft.name;
-    this.rebuildObjects();
-    this.updateToolButtons();
-    this.renderInspector();
-    this.updateSaveStatus();
-    this.showMessage(id ? "Loaded level for editing." : "Blank draft ready.");
-  }
-
-  refreshEditableLevelOptions() {
-    if (!this.editLevelEl) return;
-    this.editLevelEl.innerHTML = `
-      <option value="">Blank draft</option>
-      ${this.getEditableLevels().map((level) => `<option value="${this.escapeHtml(level.id)}" ${level.id === this.draft.id ? "selected" : ""}>${this.escapeHtml(level.name)}</option>`).join("")}
-    `;
-  }
-
   createBlankLevel() {
     return {
       id: "new-level",
@@ -819,8 +789,8 @@ export class LevelEditorScene extends Phaser.Scene {
     const saved = this.isSaved();
     this.statusEl.textContent = saved ? "SAVED" : "UNSAVED";
     this.statusEl.className = saved
-      ? "mt-3 rounded-sm border border-[#3fa68f] bg-[#102019] px-3 py-2 text-xs font-bold text-[#8ee0c6]"
-      : "mt-3 rounded-sm border border-[#7b332d] bg-[#1f1110] px-3 py-2 text-xs font-bold text-[#f07b6e]";
+      ? "mt-2 rounded-sm border border-[#3fa68f] bg-[#102019] px-3 py-2 text-xs font-bold text-[#8ee0c6]"
+      : "mt-2 rounded-sm border border-[#7b332d] bg-[#1f1110] px-3 py-2 text-xs font-bold text-[#f07b6e]";
   }
 
   clearSelection() {
