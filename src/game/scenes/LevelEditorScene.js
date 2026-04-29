@@ -25,11 +25,15 @@ const COLORS = {
   sign: { fill: 0x08100f, stroke: 0xe7d66b }
 };
 
-const WORLD_WIDTH = 4300;
-const WORLD_HEIGHT = 720;
-const GROUND_Y = 684;
+const DEFAULT_WORLD_WIDTH = 4300;
+const DEFAULT_WORLD_HEIGHT = 720;
+const MIN_WORLD_WIDTH = 1280;
+const MIN_WORLD_HEIGHT = 720;
+const DEAD_CANVAS_RIGHT = 900;
+const DEAD_CANVAS_TOP = 420;
+const WORLD_EXPAND_PADDING = 120;
 const GROUND_HEIGHT = 64;
-const GROUND_TOP = GROUND_Y - GROUND_HEIGHT / 2;
+const GROUND_BOTTOM_MARGIN = 4;
 const HUD_LEFT_WIDTH = 246;
 const HUD_RIGHT_X = 1035;
 const WORLD_VIEW_WIDTH = HUD_RIGHT_X - HUD_LEFT_WIDTH;
@@ -89,24 +93,15 @@ export class LevelEditorScene extends Phaser.Scene {
   makeDraftLevel() {
     const retainedDraft = this.registry.get("editorDraft");
     if (retainedDraft) {
-      return this.stripFixedGround(structuredClone(retainedDraft));
+      return this.normalizeDraftDimensions(this.stripFixedGround(structuredClone(retainedDraft)));
     }
 
-    return this.createBlankLevel();
+    return this.normalizeDraftDimensions(this.createBlankLevel());
   }
 
   createWorldChrome() {
-    this.add.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, 0x07100f);
-    const g = this.add.graphics();
-    g.lineStyle(1, 0x2f4b3e, 0.35);
-    for (let x = 0; x <= WORLD_WIDTH; x += 100) {
-      g.strokeLineShape(new Phaser.Geom.Line(x, 0, x, WORLD_HEIGHT));
-    }
-    for (let y = 0; y <= WORLD_HEIGHT; y += 60) {
-      g.strokeLineShape(new Phaser.Geom.Line(0, y, WORLD_WIDTH, y));
-    }
-    this.add.rectangle(WORLD_WIDTH / 2, GROUND_Y, WORLD_WIDTH, GROUND_HEIGHT, 0x17231d, 0.8).setStrokeStyle(3, 0xb9a44c);
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.worldChrome = this.add.container(0, 0).setDepth(-20);
+    this.redrawWorldChrome();
   }
 
   createInputs() {
@@ -145,6 +140,17 @@ export class LevelEditorScene extends Phaser.Scene {
           LEVEL NAME
           <input data-level-name type="text" value="${this.escapeHtml(this.draft.name)}" class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]" />
         </label>
+        <div data-canvas-size class="mt-4 grid grid-cols-2 gap-2">
+          <label class="flex flex-col gap-1 text-xs font-bold text-[#8fa89d]">
+            WIDTH
+            <input data-world-width type="number" min="${MIN_WORLD_WIDTH}" step="10" value="${this.worldWidth()}" class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]" />
+          </label>
+          <label class="flex flex-col gap-1 text-xs font-bold text-[#8fa89d]">
+            HEIGHT
+            <input data-world-height type="number" min="${MIN_WORLD_HEIGHT}" step="10" value="${this.worldHeight()}" class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]" />
+          </label>
+        </div>
+        <div class="mt-2 text-xs text-[#8fa89d]">Dead canvas expands on drop</div>
         <div data-tools class="mt-5 flex flex-col gap-2"></div>
       </aside>
       <aside data-right-panel class="pointer-events-auto absolute right-0 top-0 flex h-full w-[245px] flex-col border-l border-[#385346] bg-[#06100e]/95 p-4 shadow-[-18px_0_36px_rgba(0,0,0,0.35)]">
@@ -176,11 +182,15 @@ export class LevelEditorScene extends Phaser.Scene {
     this.messageEl = this.hudRoot.querySelector("[data-message]");
     this.statusEl = this.hudRoot.querySelector("[data-save-status]");
     this.zoomIndicatorEl = this.hudRoot.querySelector("[data-zoom-indicator]");
+    this.worldWidthInputEl = this.hudRoot.querySelector("[data-world-width]");
+    this.worldHeightInputEl = this.hudRoot.querySelector("[data-world-height]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
     this.nameInputEl.addEventListener("input", () => {
       this.draft.name = this.nameInputEl.value;
       this.markDirty();
     });
+    this.worldWidthInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
+    this.worldHeightInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
 
     TOOL_DEFS.forEach((tool) => {
       const button = document.createElement("button");
@@ -257,6 +267,71 @@ export class LevelEditorScene extends Phaser.Scene {
   blurActiveDomField() {
     if (this.isEditableDomTarget(document.activeElement)) {
       document.activeElement.blur();
+    }
+  }
+
+  worldWidth() {
+    return this.draft?.worldWidth || DEFAULT_WORLD_WIDTH;
+  }
+
+  worldHeight() {
+    return this.draft?.worldHeight || DEFAULT_WORLD_HEIGHT;
+  }
+
+  groundY() {
+    return this.worldHeight() - GROUND_HEIGHT / 2 - GROUND_BOTTOM_MARGIN;
+  }
+
+  groundTop() {
+    return this.groundY() - GROUND_HEIGHT / 2;
+  }
+
+  editableMinY() {
+    return -DEAD_CANVAS_TOP;
+  }
+
+  editableMaxX() {
+    return this.worldWidth() + DEAD_CANVAS_RIGHT;
+  }
+
+  normalizeDraftDimensions(level) {
+    level.worldWidth = Math.max(MIN_WORLD_WIDTH, Number(level.worldWidth) || DEFAULT_WORLD_WIDTH);
+    level.worldHeight = Math.max(MIN_WORLD_HEIGHT, Number(level.worldHeight) || DEFAULT_WORLD_HEIGHT);
+    level.floorY = level.worldHeight - GROUND_HEIGHT - GROUND_BOTTOM_MARGIN;
+    level.platforms ||= [];
+    level.coins ||= [];
+    level.hazards ||= [];
+    level.enemies ||= [];
+    level.challenges ||= [];
+    level.signs ||= [];
+    return level;
+  }
+
+  updateCanvasSizeFromInputs() {
+    const previousWidth = this.worldWidth();
+    const previousHeight = this.worldHeight();
+    this.draft.worldWidth = Math.max(MIN_WORLD_WIDTH, Number(this.worldWidthInputEl.value) || MIN_WORLD_WIDTH);
+    this.draft.worldHeight = Math.max(MIN_WORLD_HEIGHT, Number(this.worldHeightInputEl.value) || MIN_WORLD_HEIGHT);
+    this.draft.floorY = this.groundTop();
+    this.updateCanvasSizeInputs();
+
+    if (this.draft.worldWidth < previousWidth || this.draft.worldHeight < previousHeight) {
+      this.clampAllObjectsToWorld();
+      this.rebuildObjects();
+    }
+
+    this.redrawWorldChrome();
+    this.resizeWorldViewport();
+    this.refreshInspectorValues();
+    this.markDirty();
+  }
+
+  updateCanvasSizeInputs() {
+    if (this.worldWidthInputEl && document.activeElement !== this.worldWidthInputEl) {
+      this.worldWidthInputEl.value = this.worldWidth();
+    }
+    if (this.worldHeightInputEl && document.activeElement !== this.worldHeightInputEl) {
+      this.worldHeightInputEl.value = this.worldHeight();
     }
   }
 
@@ -347,10 +422,14 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     const created = this.createDataForTool(world.x, world.y);
+    this.clampDataToEditableArea(created.type, created);
+    const added = this.addData(created);
+    this.expandWorldToIncludeObjects([{ type: created.type, data: created }]);
     this.clampDataToWorld(created.type, created);
-    this.addData(created);
     this.rebuildObjects();
-    this.selectObject(this.objects[this.objects.length - 1]);
+    this.redrawWorldChrome();
+    this.resizeWorldViewport();
+    this.selectObject(this.objects.find((obj) => obj.data === added) || this.objects[this.objects.length - 1]);
     this.activeTool = null;
     this.updateToolButtons();
     this.markDirty();
@@ -381,11 +460,11 @@ export class LevelEditorScene extends Phaser.Scene {
 
     const dx = world.x - this.dragging.startX;
     const dy = world.y - this.dragging.startY;
-    const clampedDelta = this.clampedSelectionDelta(this.dragging.objects, dx, dy);
+    const clampedDelta = this.clampedEditableSelectionDelta(this.dragging.objects, dx, dy);
     for (const item of this.dragging.objects) {
       item.obj.data.x = item.startX + clampedDelta.dx;
       item.obj.data.y = item.startY + clampedDelta.dy;
-      this.clampDataToWorld(item.obj.type, item.obj.data);
+      this.clampDataToEditableArea(item.obj.type, item.obj.data);
       this.syncVisual(item.obj);
     }
     this.refreshInspectorValues();
@@ -393,10 +472,22 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   onPointerUp() {
+    const draggedObjects = this.dragging?.objects.map(({ obj }) => obj) || [];
     this.finishAreaSelection();
     this.dragging = null;
     this.cameraDrag = null;
     this.input.setDefaultCursor("default");
+    if (draggedObjects.length > 0) {
+      this.expandWorldToIncludeObjects(draggedObjects);
+      draggedObjects.forEach((obj) => {
+        this.clampDataToWorld(obj.type, obj.data);
+        this.syncVisual(obj);
+      });
+      this.redrawWorldChrome();
+      this.resizeWorldViewport();
+      this.refreshInspectorValues();
+      this.markDirty();
+    }
   }
 
   startCameraDrag(pointer) {
@@ -512,6 +603,141 @@ export class LevelEditorScene extends Phaser.Scene {
     }
   }
 
+  redrawWorldChrome() {
+    this.worldChrome?.removeAll(true);
+
+    const width = this.worldWidth();
+    const height = this.worldHeight();
+    const groundY = this.groundY();
+
+    const graphics = this.add.graphics().setDepth(-20);
+    graphics.fillStyle(0x000000, 1);
+    graphics.fillRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+
+    graphics.fillStyle(0x000000, 1);
+    graphics.fillRect(0, -DEAD_CANVAS_TOP, width, DEAD_CANVAS_TOP);
+    graphics.fillRect(width, -DEAD_CANVAS_TOP, DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+    this.drawDeadCanvasDots(graphics, 0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP, width, height);
+
+    graphics.fillStyle(0x07100f, 1);
+    graphics.fillRect(0, 0, width, height);
+
+    graphics.lineStyle(1, 0x2f4b3e, 0.35);
+    for (let x = 0; x <= width; x += 100) {
+      graphics.strokeLineShape(new Phaser.Geom.Line(x, 0, x, height));
+    }
+    for (let y = 0; y <= height; y += 60) {
+      graphics.strokeLineShape(new Phaser.Geom.Line(0, y, width, y));
+    }
+
+    graphics.fillStyle(0x17231d, 0.8);
+    graphics.fillRect(0, groundY - GROUND_HEIGHT / 2, width, GROUND_HEIGHT);
+    graphics.lineStyle(3, 0xb9a44c, 1);
+    graphics.strokeRect(0, groundY - GROUND_HEIGHT / 2, width, GROUND_HEIGHT);
+
+    graphics.lineStyle(3, 0xd65f4f, 0.9);
+    graphics.strokeLineShape(new Phaser.Geom.Line(0, 0, width, 0));
+    graphics.strokeLineShape(new Phaser.Geom.Line(width, 0, width, height));
+    graphics.lineStyle(2, 0xd65f4f, 0.28);
+    graphics.strokeRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+    this.worldChrome.add(graphics);
+
+    this.cameras.main.setBounds(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+  }
+
+  drawDeadCanvasDots(graphics, x, y, width, height, playableWidth, playableHeight) {
+    if (width <= 0 || height <= 0) return;
+    const spacing = 24;
+    graphics.fillStyle(0xff3b30, 1);
+    for (let dotY = y + spacing / 2; dotY < y + height; dotY += spacing) {
+      for (let dotX = x + spacing / 2; dotX < x + width; dotX += spacing) {
+        if (dotX >= 0 && dotX <= playableWidth && dotY >= 0 && dotY <= playableHeight) {
+          continue;
+        }
+        graphics.fillRect(Math.round(dotX) - 1, Math.round(dotY) - 1, 3, 3);
+      }
+    }
+  }
+
+  objectBounds(type, data) {
+    const size = this.objectSize(type, data);
+    return {
+      left: data.x - size.width / 2,
+      right: data.x + size.width / 2,
+      top: data.y - size.height / 2,
+      bottom: data.y + size.height / 2
+    };
+  }
+
+  unionObjectBounds(objects) {
+    return objects.reduce((bounds, obj) => {
+      const next = this.objectBounds(obj.type, obj.data);
+      if (!bounds) return { ...next };
+      return {
+        left: Math.min(bounds.left, next.left),
+        right: Math.max(bounds.right, next.right),
+        top: Math.min(bounds.top, next.top),
+        bottom: Math.max(bounds.bottom, next.bottom)
+      };
+    }, null);
+  }
+
+  expandWorldToIncludeObjects(objects) {
+    const bounds = this.unionObjectBounds(objects);
+    if (!bounds) return false;
+
+    let expanded = false;
+    if (bounds.right > this.worldWidth()) {
+      this.draft.worldWidth = Math.max(
+        this.worldWidth(),
+        Math.ceil((bounds.right + WORLD_EXPAND_PADDING) / 10) * 10
+      );
+      expanded = true;
+    }
+
+    if (bounds.top < 0) {
+      const shiftY = Math.ceil((-bounds.top + WORLD_EXPAND_PADDING) / 10) * 10;
+      this.shiftAllObjectsY(shiftY);
+      this.draft.worldHeight = this.worldHeight() + shiftY;
+      this.cameras.main.scrollY += shiftY;
+      expanded = true;
+    }
+
+    if (expanded) {
+      this.draft.floorY = this.groundTop();
+      this.updateCanvasSizeInputs();
+      this.objects.forEach((obj) => this.syncVisual(obj));
+    }
+    return expanded;
+  }
+
+  shiftAllObjectsY(shiftY) {
+    this.allObjectData().forEach(({ type, data }) => {
+      data.y += shiftY;
+      if (type === "merchant" && typeof data.npcY === "number") {
+        data.npcY += shiftY;
+      }
+    });
+  }
+
+  allObjectData() {
+    return [
+      ...this.draft.platforms.map((data) => ({ type: "platform", data })),
+      ...this.draft.coins.map((data) => ({ type: "coin", data })),
+      ...this.draft.hazards.map((data) => ({ type: "hazard", data })),
+      ...this.draft.enemies.map((data) => ({ type: "enemy", data })),
+      ...this.draft.challenges.map((data) => ({ type: "challenge", data })),
+      ...(this.draft.merchant ? [{ type: "merchant", data: this.draft.merchant }] : []),
+      ...(this.draft.exitGate ? [{ type: "exitGate", data: this.draft.exitGate }] : []),
+      ...(this.draft.playerSpawn ? [{ type: "playerSpawn", data: this.draft.playerSpawn }] : []),
+      ...this.draft.signs.map((data) => ({ type: "sign", data }))
+    ];
+  }
+
+  clampAllObjectsToWorld() {
+    this.allObjectData().forEach(({ type, data }) => this.clampDataToWorld(type, data));
+  }
+
   findObjectAt(x, y) {
     for (let i = this.objects.length - 1; i >= 0; i -= 1) {
       const obj = this.objects[i];
@@ -564,7 +790,7 @@ export class LevelEditorScene extends Phaser.Scene {
     return new Phaser.Geom.Rectangle(minX, minY, maxX - minX, maxY - minY);
   }
 
-  clampedSelectionDelta(items, dx, dy) {
+  clampedEditableSelectionDelta(items, dx, dy) {
     let minDx = -Infinity;
     let maxDx = Infinity;
     let minDy = -Infinity;
@@ -572,9 +798,9 @@ export class LevelEditorScene extends Phaser.Scene {
     for (const { obj, startX, startY } of items) {
       const size = this.objectSize(obj.type, obj.data);
       minDx = Math.max(minDx, size.width / 2 - startX);
-      maxDx = Math.min(maxDx, WORLD_WIDTH - size.width / 2 - startX);
-      minDy = Math.max(minDy, size.height / 2 - startY);
-      maxDy = Math.min(maxDy, GROUND_TOP - size.height / 2 - startY);
+      maxDx = Math.min(maxDx, this.editableMaxX() - size.width / 2 - startX);
+      minDy = Math.max(minDy, this.editableMinY() + size.height / 2 - startY);
+      maxDy = Math.min(maxDy, this.groundTop() - size.height / 2 - startY);
     }
     return {
       dx: Phaser.Math.Clamp(dx, minDx, maxDx),
@@ -830,8 +1056,13 @@ export class LevelEditorScene extends Phaser.Scene {
 
   toLevelData() {
     const level = structuredClone(this.draft);
+    const width = this.worldWidth();
+    const height = this.worldHeight();
+    level.worldWidth = width;
+    level.worldHeight = height;
+    level.floorY = this.groundTop();
     level.platforms = [
-      { x: WORLD_WIDTH / 2, y: GROUND_Y, width: WORLD_WIDTH, height: GROUND_HEIGHT },
+      { x: width / 2, y: this.groundY(), width, height: GROUND_HEIGHT },
       ...(level.platforms || [])
     ];
     return level;
@@ -865,8 +1096,9 @@ export class LevelEditorScene extends Phaser.Scene {
     return {
       id: "new-level",
       name: "New Level",
-      worldWidth: WORLD_WIDTH,
-      floorY: 652,
+      worldWidth: DEFAULT_WORLD_WIDTH,
+      worldHeight: DEFAULT_WORLD_HEIGHT,
+      floorY: DEFAULT_WORLD_HEIGHT - GROUND_HEIGHT - GROUND_BOTTOM_MARGIN,
       playerSpawn: null,
       platforms: [],
       coins: [],
@@ -880,10 +1112,18 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   stripFixedGround(level) {
+    const width = level.worldWidth || DEFAULT_WORLD_WIDTH;
+    const height = level.worldHeight || DEFAULT_WORLD_HEIGHT;
+    const groundY = height - GROUND_HEIGHT / 2 - GROUND_BOTTOM_MARGIN;
     return {
       ...level,
       platforms: (level.platforms || []).filter((platform) => {
-        return !(platform.x === WORLD_WIDTH / 2 && platform.y === GROUND_Y && platform.width === WORLD_WIDTH && platform.height === GROUND_HEIGHT);
+        return !(
+          platform.x === width / 2 &&
+          platform.y === groundY &&
+          platform.width === width &&
+          platform.height === GROUND_HEIGHT
+        );
       })
     };
   }
@@ -947,7 +1187,7 @@ export class LevelEditorScene extends Phaser.Scene {
   resizeWorldViewport() {
     const x = this.hudVisible ? HUD_LEFT_WIDTH : 0;
     const width = this.hudVisible ? WORLD_VIEW_WIDTH : 1280;
-    this.cameras.main.setViewport(x, 0, width, WORLD_HEIGHT);
+    this.cameras.main.setViewport(x, 0, width, DEFAULT_WORLD_HEIGHT);
     this.clampCameraScroll();
   }
 
@@ -959,12 +1199,12 @@ export class LevelEditorScene extends Phaser.Scene {
     camera.scrollX = Phaser.Math.Clamp(
       camera.scrollX,
       0,
-      Math.max(0, WORLD_WIDTH - visibleWorldWidth)
+      Math.max(0, this.worldWidth() + DEAD_CANVAS_RIGHT - visibleWorldWidth)
     );
     camera.scrollY = Phaser.Math.Clamp(
       camera.scrollY,
-      0,
-      Math.max(0, WORLD_HEIGHT - visibleWorldHeight)
+      -DEAD_CANVAS_TOP,
+      Math.max(-DEAD_CANVAS_TOP, this.worldHeight() - visibleWorldHeight)
     );
   }
 
@@ -1060,18 +1300,35 @@ export class LevelEditorScene extends Phaser.Scene {
 
   clampDataToWorld(type, data) {
     const size = this.objectSize(type, data);
-    data.x = Phaser.Math.Clamp(data.x, size.width / 2, WORLD_WIDTH - size.width / 2);
-    data.y = Phaser.Math.Clamp(data.y, size.height / 2, GROUND_TOP - size.height / 2);
+    data.x = Phaser.Math.Clamp(data.x, size.width / 2, this.worldWidth() - size.width / 2);
+    data.y = Phaser.Math.Clamp(data.y, size.height / 2, this.groundTop() - size.height / 2);
     if (type === "enemy") {
-      data.min = Phaser.Math.Clamp(data.min, 0, WORLD_WIDTH);
-      data.max = Phaser.Math.Clamp(data.max, 0, WORLD_WIDTH);
+      data.min = Phaser.Math.Clamp(data.min, 0, this.worldWidth());
+      data.max = Phaser.Math.Clamp(data.max, 0, this.worldWidth());
       if (data.min > data.max) {
         [data.min, data.max] = [data.max, data.min];
       }
     }
     if (type === "merchant") {
-      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, WORLD_WIDTH - 30);
-      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, 43, GROUND_TOP - 43);
+      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, this.worldWidth() - 30);
+      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, 43, this.groundTop() - 43);
+    }
+  }
+
+  clampDataToEditableArea(type, data) {
+    const size = this.objectSize(type, data);
+    data.x = Phaser.Math.Clamp(data.x, size.width / 2, this.editableMaxX() - size.width / 2);
+    data.y = Phaser.Math.Clamp(data.y, this.editableMinY() + size.height / 2, this.groundTop() - size.height / 2);
+    if (type === "enemy") {
+      data.min = Phaser.Math.Clamp(data.min, 0, this.editableMaxX());
+      data.max = Phaser.Math.Clamp(data.max, 0, this.editableMaxX());
+      if (data.min > data.max) {
+        [data.min, data.max] = [data.max, data.min];
+      }
+    }
+    if (type === "merchant") {
+      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, this.editableMaxX() - 30);
+      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, this.editableMinY() + 43, this.groundTop() - 43);
     }
   }
 

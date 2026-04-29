@@ -23,7 +23,8 @@ export class GameScene extends Phaser.Scene {
     this.tuning = DIFFICULTY[this.difficulty];
     this.level = this.getActiveLevel();
     this.worldWidth = this.level.worldWidth || 4300;
-    this.floorY = this.level.floorY || 652;
+    this.worldHeight = this.level.worldHeight || 720;
+    this.floorY = this.level.floorY || this.worldHeight - 68;
     this.coins = 0;
     this.maxHealth = 3;
     this.health = this.maxHealth;
@@ -73,8 +74,8 @@ export class GameScene extends Phaser.Scene {
     this.createInputs();
 
     this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
-    this.cameras.main.setBounds(0, 0, this.worldWidth, 720);
-    this.physics.world.setBounds(0, 0, this.worldWidth, 720);
+    this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.input.once("pointerdown", () => this.ensureAudio());
     this.input.keyboard.once("keydown", () => this.ensureAudio());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopMusic());
@@ -144,7 +145,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   createWorld() {
-    this.add.rectangle(this.worldWidth / 2, 360, this.worldWidth, 720, 0x07100f);
+    this.add.rectangle(this.worldWidth / 2, this.worldHeight / 2, this.worldWidth, this.worldHeight, 0x07100f);
     this.drawParallaxBands();
 
     this.platforms = this.physics.add.staticGroup();
@@ -159,17 +160,18 @@ export class GameScene extends Phaser.Scene {
 
   drawParallaxBands() {
     const graphics = this.add.graphics();
+    const bandY = Math.max(0, this.floorY - 144);
     graphics.fillStyle(0x0f1a18, 1);
-    graphics.fillRect(0, 508, this.worldWidth, 144);
+    graphics.fillRect(0, bandY, this.worldWidth, 144);
     graphics.fillStyle(0x16251f, 1);
     for (let x = 0; x < this.worldWidth; x += 180) {
       const height = 80 + ((x / 180) % 4) * 34;
-      graphics.fillRect(x, 508 - height, 92, height);
-      graphics.fillRect(x + 110, 508 - height * 0.7, 54, height * 0.7);
+      graphics.fillRect(x, bandY - height, 92, height);
+      graphics.fillRect(x + 110, bandY - height * 0.7, 54, height * 0.7);
     }
     graphics.lineStyle(2, 0x385346, 0.45);
     for (let x = 0; x < this.worldWidth; x += 120) {
-      graphics.strokeLineShape(new Phaser.Geom.Line(x, 510, x + 90, 470));
+      graphics.strokeLineShape(new Phaser.Geom.Line(x, bandY + 2, x + 90, bandY - 38));
     }
   }
 
