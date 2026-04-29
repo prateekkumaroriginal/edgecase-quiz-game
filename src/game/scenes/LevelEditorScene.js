@@ -31,6 +31,7 @@ const MIN_WORLD_WIDTH = 1280;
 const MIN_WORLD_HEIGHT = 720;
 const DEAD_CANVAS_RIGHT = 900;
 const DEAD_CANVAS_TOP = 420;
+const DEAD_CANVAS_BOTTOM = 420;
 const WORLD_EXPAND_PADDING = 120;
 const GROUND_HEIGHT = 64;
 const GROUND_BOTTOM_MARGIN = 4;
@@ -108,6 +109,8 @@ export class LevelEditorScene extends Phaser.Scene {
     this.input.on("pointerdown", (pointer) => this.onPointerDown(pointer));
     this.input.on("pointermove", (pointer) => this.onPointerMove(pointer));
     this.input.on("pointerup", () => this.onPointerUp());
+    window.addEventListener("pointerup", this.handleWindowPointerUp);
+    window.addEventListener("blur", this.handleWindowPointerCancel);
     this.input.on("wheel", (pointer, _objects, dx, dy, event) => this.onWheel(pointer, dx, dy, event));
 
     this.keys = this.input.keyboard.addKeys({
@@ -130,8 +133,10 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot = document.createElement("div");
     this.hudRoot.className = "pointer-events-none absolute inset-0 z-10 font-mono text-[#edf8ed]";
     this.hudRoot.innerHTML = `
-      <div data-zoom-indicator class="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-1 text-xs font-bold text-[#f4e786] shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
-        ZOOM 100%
+      <div data-zoom-control class="pointer-events-auto absolute left-1/2 top-3 flex -translate-x-1/2 items-center overflow-hidden rounded-sm border border-[#385346] bg-[#06100e]/90 text-xs font-bold text-[#f4e786] shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+        <button data-zoom-out type="button" title="Zoom out" class="grid h-8 w-8 place-items-center border-r border-[#385346] text-lg leading-none transition hover:bg-[#102019] hover:text-[#fff3a6]">-</button>
+        <button data-zoom-indicator type="button" title="Reset zoom" class="h-8 min-w-24 px-3 transition hover:bg-[#102019] hover:text-[#fff3a6]">ZOOM 100%</button>
+        <button data-zoom-in type="button" title="Zoom in" class="grid h-8 w-8 place-items-center border-l border-[#385346] text-lg leading-none transition hover:bg-[#102019] hover:text-[#fff3a6]">+</button>
       </div>
       <aside data-left-panel class="pointer-events-auto absolute left-0 top-0 flex h-full w-[246px] flex-col border-r border-[#385346] bg-[#06100e]/95 p-4 shadow-[18px_0_36px_rgba(0,0,0,0.35)]">
         <div class="font-[EdgecaseTitle] text-3xl text-[#e7d66b]">LEVEL MAKER</div>
@@ -191,6 +196,9 @@ export class LevelEditorScene extends Phaser.Scene {
     });
     this.worldWidthInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
     this.worldHeightInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
+    this.hudRoot.querySelector("[data-zoom-out]").addEventListener("click", () => this.adjustCanvasZoom(-ZOOM_STEP));
+    this.hudRoot.querySelector("[data-zoom-in]").addEventListener("click", () => this.adjustCanvasZoom(ZOOM_STEP));
+    this.zoomIndicatorEl.addEventListener("click", () => this.resetCanvasZoom());
 
     TOOL_DEFS.forEach((tool) => {
       const button = document.createElement("button");
@@ -210,6 +218,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot.querySelector("[data-action='exit']").addEventListener("click", () => this.exitEditor());
     this.hudRoot.querySelector("[data-action='save']").addEventListener("click", () => this.saveLevel());
     this.hudRoot.querySelector("[data-action='playtest']").addEventListener("click", () => this.playtest());
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.resizeWorldViewport, this);
     this.updateToolButtons();
     this.renderInspector();
     this.savedSnapshot = this.serializeDraft();
@@ -386,6 +395,24 @@ export class LevelEditorScene extends Phaser.Scene {
     this.updateZoomIndicator();
   }
 
+  handleWindowPointerUp = () => {
+    if (this.areaSelection || this.dragging || this.cameraDrag) {
+      this.onPointerUp();
+    }
+  };
+
+  handleWindowPointerCancel = () => {
+    this.cancelPointerInteraction();
+  };
+
+  adjustCanvasZoom(delta) {
+    this.setCanvasZoom(Phaser.Math.Clamp(
+      this.cameras.main.zoom + delta,
+      MIN_ZOOM,
+      MAX_ZOOM
+    ));
+  }
+
   resetCanvasZoom() {
     this.cameras.main.setZoom(DEFAULT_ZOOM);
     this.clampCameraScroll();
@@ -394,6 +421,10 @@ export class LevelEditorScene extends Phaser.Scene {
 
   onPointerDown(pointer) {
     this.blurActiveDomField();
+    if (this.areaSelection || this.dragging || this.cameraDrag) {
+      this.cancelPointerInteraction();
+    }
+
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) return;
 
@@ -439,6 +470,9 @@ export class LevelEditorScene extends Phaser.Scene {
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) {
       this.setHoveredObject(null);
+      if (!pointer.isDown && (this.areaSelection || this.dragging || this.cameraDrag)) {
+        this.cancelPointerInteraction();
+      }
       return;
     }
 
@@ -488,6 +522,16 @@ export class LevelEditorScene extends Phaser.Scene {
       this.refreshInspectorValues();
       this.markDirty();
     }
+  }
+
+  cancelPointerInteraction() {
+    if (this.areaSelection) {
+      this.areaSelection.visual.destroy();
+      this.areaSelection = null;
+    }
+    this.dragging = null;
+    this.cameraDrag = null;
+    this.input.setDefaultCursor("default");
   }
 
   startCameraDrag(pointer) {
@@ -612,12 +656,13 @@ export class LevelEditorScene extends Phaser.Scene {
 
     const graphics = this.add.graphics().setDepth(-20);
     graphics.fillStyle(0x000000, 1);
-    graphics.fillRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+    graphics.fillRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
 
     graphics.fillStyle(0x000000, 1);
     graphics.fillRect(0, -DEAD_CANVAS_TOP, width, DEAD_CANVAS_TOP);
-    graphics.fillRect(width, -DEAD_CANVAS_TOP, DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
-    this.drawDeadCanvasDots(graphics, 0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP, width, height);
+    graphics.fillRect(width, -DEAD_CANVAS_TOP, DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
+    graphics.fillRect(0, height, width + DEAD_CANVAS_RIGHT, DEAD_CANVAS_BOTTOM);
+    this.drawDeadCanvasDots(graphics, 0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM, width, height);
 
     graphics.fillStyle(0x07100f, 1);
     graphics.fillRect(0, 0, width, height);
@@ -639,10 +684,10 @@ export class LevelEditorScene extends Phaser.Scene {
     graphics.strokeLineShape(new Phaser.Geom.Line(0, 0, width, 0));
     graphics.strokeLineShape(new Phaser.Geom.Line(width, 0, width, height));
     graphics.lineStyle(2, 0xd65f4f, 0.28);
-    graphics.strokeRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+    graphics.strokeRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
     this.worldChrome.add(graphics);
 
-    this.cameras.main.setBounds(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP);
+    this.cameras.main.setBounds(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
   }
 
   drawDeadCanvasDots(graphics, x, y, width, height, playableWidth, playableHeight) {
@@ -1186,8 +1231,11 @@ export class LevelEditorScene extends Phaser.Scene {
 
   resizeWorldViewport() {
     const x = this.hudVisible ? HUD_LEFT_WIDTH : 0;
-    const width = this.hudVisible ? WORLD_VIEW_WIDTH : 1280;
-    this.cameras.main.setViewport(x, 0, width, DEFAULT_WORLD_HEIGHT);
+    const gameWidth = this.scale.gameSize.width || 1280;
+    const gameHeight = this.scale.gameSize.height || DEFAULT_WORLD_HEIGHT;
+    const rightPanelWidth = this.hudVisible ? Math.max(0, gameWidth - HUD_RIGHT_X) : 0;
+    const width = this.hudVisible ? Math.max(320, gameWidth - HUD_LEFT_WIDTH - rightPanelWidth) : gameWidth;
+    this.cameras.main.setViewport(x, 0, width, gameHeight);
     this.clampCameraScroll();
   }
 
@@ -1195,16 +1243,18 @@ export class LevelEditorScene extends Phaser.Scene {
     const camera = this.cameras.main;
     const visibleWorldWidth = camera.width / camera.zoom;
     const visibleWorldHeight = camera.height / camera.zoom;
+    const maxScrollX = this.worldWidth() + DEAD_CANVAS_RIGHT - visibleWorldWidth;
+    const maxScrollY = this.worldHeight() + DEAD_CANVAS_BOTTOM - visibleWorldHeight;
 
     camera.scrollX = Phaser.Math.Clamp(
       camera.scrollX,
-      0,
-      Math.max(0, this.worldWidth() + DEAD_CANVAS_RIGHT - visibleWorldWidth)
+      Math.min(0, maxScrollX),
+      Math.max(0, maxScrollX)
     );
     camera.scrollY = Phaser.Math.Clamp(
       camera.scrollY,
-      -DEAD_CANVAS_TOP,
-      Math.max(-DEAD_CANVAS_TOP, this.worldHeight() - visibleWorldHeight)
+      Math.min(-DEAD_CANVAS_TOP, maxScrollY),
+      Math.max(-DEAD_CANVAS_TOP, maxScrollY)
     );
   }
 
@@ -1234,6 +1284,9 @@ export class LevelEditorScene extends Phaser.Scene {
 
   destroyDomHud() {
     window.clearTimeout(this.messageTimer);
+    window.removeEventListener("pointerup", this.handleWindowPointerUp);
+    window.removeEventListener("blur", this.handleWindowPointerCancel);
+    this.scale?.off(Phaser.Scale.Events.RESIZE, this.resizeWorldViewport, this);
     this.hudRoot?.remove();
     this.hudRoot = null;
   }

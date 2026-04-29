@@ -15,7 +15,7 @@ const config = {
   parent: "game-root",
   backgroundColor: "#07100f",
   scale: {
-    mode: Phaser.Scale.FIT,
+    mode: Phaser.Scale.ENVELOP,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: 1280,
     height: 720
