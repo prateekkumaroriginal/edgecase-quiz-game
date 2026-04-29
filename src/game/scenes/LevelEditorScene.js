@@ -677,7 +677,9 @@ export class LevelEditorScene extends Phaser.Scene {
     try {
       const saved = await window.edgecase.saveLevel(this.toLevelData());
       this.draft.id = saved.id;
-      this.registry.set("devSavedLevels", this.upsertDevSavedLevel(this.toLevelData()));
+      const levels = window.edgecase.loadLevels ? await window.edgecase.loadLevels() : this.upsertDevSavedLevel(this.toLevelData());
+      this.registry.set("devSavedLevels", Array.isArray(levels) ? levels : this.upsertDevSavedLevel(this.toLevelData()));
+      this.registry.set("devSavedLevelsLoaded", Array.isArray(levels));
       this.registry.set("selectedLevelId", saved.id);
       this.savedSnapshot = this.serializeDraft();
       this.updateSaveStatus();
@@ -738,6 +740,10 @@ export class LevelEditorScene extends Phaser.Scene {
 
   getEditableLevels() {
     const devSavedLevels = this.registry.get("devSavedLevels") || [];
+    if (this.registry.get("devSavedLevelsLoaded")) {
+      return devSavedLevels;
+    }
+
     const levelsById = new Map(LEVELS.map((level) => [level.id, level]));
     for (const level of devSavedLevels) {
       levelsById.set(level.id, level);

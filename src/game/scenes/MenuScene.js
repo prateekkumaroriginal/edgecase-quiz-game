@@ -1,14 +1,6 @@
-import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
-import { Pencil } from "lucide";
+import { DEFAULT_LEVEL_ID } from "../data/levels.js";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
-const LEVEL_LIST_X = 110;
-const LEVEL_LIST_Y = 274;
-const LEVEL_BUTTON_WIDTH = 540;
-const LEVEL_BUTTON_HEIGHT = 42;
-const LEVEL_BUTTON_GAP = 52;
-const LEVEL_LABEL_X = LEVEL_LIST_X + 24;
-const LEVEL_LABEL_MAX_CHARS = 34;
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -20,8 +12,6 @@ export class MenuScene extends Phaser.Scene {
     this.registry.set("selectedLevelId", this.registry.get("selectedLevelId") || DEFAULT_LEVEL_ID);
     this.registry.remove("draftLevel");
     this.registry.remove("editorDraft");
-    this.levels = this.getSelectableLevels();
-    this.editButtons = [];
     this.menuItems = [];
     this.menuIndex = 0;
     this.cameras.main.setBackgroundColor("#07100f");
@@ -47,8 +37,7 @@ export class MenuScene extends Phaser.Scene {
       color: "#d7c96d"
     });
 
-    this.add.text(LEVEL_LIST_X, 230, "Select level", this.headingStyle());
-
+    this.add.text(110, 246, "MAIN MENU", this.headingStyle());
     this.createMenuButtons();
 
     this.add.text(100, 642, "A/D move  |  Space jump  |  E interact  |  Physical quiz answers use doors", {
@@ -65,145 +54,33 @@ export class MenuScene extends Phaser.Scene {
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
       enter: Phaser.Input.Keyboard.KeyCodes.ENTER
     });
-    this.scale.on("resize", this.positionPencilButtons, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroyEditButtons());
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.destroyEditButtons());
     this.updateMenuFocus();
-    this.refreshDevLevelsFromDisk();
   }
 
   createMenuButtons() {
-    this.createLevelButtons();
-    this.createActionButtons();
-  }
-
-  createLevelButtons() {
-    this.levels.forEach((level, index) => {
-      const y = LEVEL_LIST_Y + index * LEVEL_BUTTON_GAP;
-      const rect = this.add.rectangle(LEVEL_LIST_X + LEVEL_BUTTON_WIDTH / 2, y, LEVEL_BUTTON_WIDTH, LEVEL_BUTTON_HEIGHT, 0x22312b)
-        .setStrokeStyle(2, 0xe9eedc)
-        .setInteractive({ useHandCursor: true });
-      const label = this.add.text(LEVEL_LABEL_X, y - 15, this.formatLevelLabel(index, level.name), this.itemStyle("#f2f8e8"));
-      const item = { type: "level", id: level.id, rect, label, select: () => this.selectLevel(level.id) };
-      rect.on("pointerover", () => this.focusItem(item));
-      rect.on("pointerdown", item.select);
-      if (IS_DEV) {
-        const editButton = this.createPencilButton(rect.x + rect.displayWidth / 2 - 30, rect.y, level);
-        item.editButton = editButton;
-      }
-      this.menuItems.push(item);
-    });
-  }
-
-  formatLevelLabel(index, name) {
-    const prefix = `${index + 1}. `;
-    const cleanName = String(name || "Untitled").trim() || "Untitled";
-    const maxNameLength = Math.max(8, LEVEL_LABEL_MAX_CHARS - prefix.length);
-    const labelName = cleanName.length > maxNameLength ? `${cleanName.slice(0, maxNameLength - 3)}...` : cleanName;
-    return `${prefix}${labelName}`;
-  }
-
-  createPencilButton(x, y, level) {
-    const host = document.getElementById("game-root") || document.body;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.setAttribute("aria-label", `Edit ${level.name}`);
-    button.className = "pointer-events-auto absolute z-20 grid h-8 w-8 place-items-center rounded-sm border border-[#385346] bg-[#102019] text-[#edf8ed] transition-colors hover:border-[#f4e786] hover:bg-[#21372e] hover:text-[#f4e786]";
-    button.innerHTML = this.lucideSvg(Pencil, 16);
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.editLevel(level.id);
-    });
-    host.appendChild(button);
-    this.editButtons.push({ button, x, y });
-    this.positionPencilButton(button, x, y);
-    return button;
-  }
-
-  positionPencilButton(button, x, y) {
-    const host = document.getElementById("game-root") || document.body;
-    const canvasRect = this.game.canvas.getBoundingClientRect();
-    const hostRect = host.getBoundingClientRect();
-    const scaleX = canvasRect.width / this.scale.width;
-    const scaleY = canvasRect.height / this.scale.height;
-    const left = canvasRect.left - hostRect.left + x * scaleX - 16;
-    const top = canvasRect.top - hostRect.top + y * scaleY - 16;
-    button.style.left = `${left}px`;
-    button.style.top = `${top}px`;
-  }
-
-  positionPencilButtons() {
-    this.editButtons?.forEach(({ button, x, y }) => this.positionPencilButton(button, x, y));
-  }
-
-  createActionButtons() {
     const actions = [
-      { label: "START RUN", x: 250, y: 560, width: 300, action: () => this.startRun() }
+      { label: "PLAY", y: 318, action: () => this.scene.start("LevelSelectScene") },
+      { label: "SETTINGS", y: 404, action: () => this.scene.start("SettingsScene") }
     ];
 
     if (IS_DEV) {
-      actions.push({ label: "LEVEL MAKER", x: 610, y: 560, width: 320, action: () => this.scene.start("LevelEditorScene") });
+      actions.push({ label: "LEVEL MAKER", y: 490, action: () => this.scene.start("LevelEditorScene") });
     }
 
     actions.forEach((action) => {
-      const rect = this.add.rectangle(action.x, action.y, action.width, 62, 0xe7d66b).setStrokeStyle(3, 0x101814).setInteractive({ useHandCursor: true });
-      const label = this.add.text(action.x, action.y, action.label, {
+      const rect = this.add.rectangle(300, action.y, 380, 62, 0xe7d66b)
+        .setStrokeStyle(3, 0x101814)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add.text(300, action.y, action.label, {
         fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-        fontSize: "34px",
+        fontSize: action.label.length > 9 ? "30px" : "34px",
         color: "#07100f"
       }).setOrigin(0.5);
-      const item = { type: "action", rect, label, select: action.action };
+      const item = { rect, label, select: action.action };
       rect.on("pointerover", () => this.focusItem(item));
       rect.on("pointerdown", item.select);
       this.menuItems.push(item);
     });
-  }
-
-  async refreshDevLevelsFromDisk() {
-    if (!IS_DEV || !window.edgecase?.loadLevels) {
-      return;
-    }
-
-    try {
-      const levels = await window.edgecase.loadLevels();
-      if (!this.scene.isActive()) {
-        return;
-      }
-      if (!Array.isArray(levels) || !levels.length) {
-        return;
-      }
-
-      this.registry.set("devSavedLevels", levels);
-      const selectedLevelId = this.registry.get("selectedLevelId");
-      if (!levels.some((level) => level.id === selectedLevelId)) {
-        this.registry.set("selectedLevelId", levels[0].id);
-      }
-
-      this.levels = this.getSelectableLevels();
-      this.rebuildMenuButtons();
-      this.updateMenuFocus();
-    } catch (error) {
-      console.warn("Could not refresh dev levels", error);
-    }
-  }
-
-  rebuildMenuButtons() {
-    const selectedItem = this.menuItems[this.menuIndex];
-    const selectedType = selectedItem?.type;
-    const selectedId = selectedItem?.id;
-    this.menuItems.forEach((item) => {
-      item.rect?.destroy();
-      item.label?.destroy();
-      item.note?.destroy();
-      item.editButton?.remove();
-    });
-    this.destroyEditButtons();
-    this.menuItems = [];
-    this.editButtons = [];
-    this.createMenuButtons();
-
-    const nextIndex = this.menuItems.findIndex((item) => item.type === selectedType && (!selectedId || item.id === selectedId));
-    this.menuIndex = nextIndex >= 0 ? nextIndex : Math.min(this.menuIndex, this.menuItems.length - 1);
   }
 
   update() {
@@ -225,50 +102,12 @@ export class MenuScene extends Phaser.Scene {
     this.updateMenuFocus();
   }
 
-  startRun() {
-    this.registry.remove("draftLevel");
-    this.scene.start("GameScene");
-  }
-
-  selectLevel(id) {
-    this.registry.set("selectedLevelId", id);
-    this.updateMenuFocus();
-  }
-
-  editLevel(id) {
-    const level = this.levels.find((item) => item.id === id);
-    if (!level) return;
-    this.registry.set("editorDraft", structuredClone(level));
-    this.scene.start("LevelEditorScene");
-  }
-
   updateMenuFocus() {
-    const selectedLevelId = this.registry.get("selectedLevelId");
-
     this.menuItems.forEach((item, index) => {
       const focused = this.menuIndex === index;
-      if (item.type === "level") {
-        const selected = selectedLevelId === item.id;
-        item.rect.setFillStyle(selected ? 0x2f5546 : 0x22312b);
-        item.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
-        item.label.setColor(selected ? "#f4e786" : "#f2f8e8");
-      } else {
-        item.rect.setStrokeStyle(focused ? 5 : 3, focused ? 0xf4e786 : 0x101814);
-      }
+      item.rect.setStrokeStyle(focused ? 5 : 3, focused ? 0xf4e786 : 0x101814);
+      item.rect.setFillStyle(focused ? 0xf4e786 : 0xe7d66b);
     });
-  }
-
-  getSelectableLevels() {
-    if (!IS_DEV) {
-      return LEVELS;
-    }
-
-    const devSavedLevels = this.registry.get("devSavedLevels") || [];
-    const levelsById = new Map(LEVELS.map((level) => [level.id, level]));
-    for (const level of devSavedLevels) {
-      levelsById.set(level.id, level);
-    }
-    return Array.from(levelsById.values());
   }
 
   drawCircuitBackdrop() {
@@ -290,33 +129,5 @@ export class MenuScene extends Phaser.Scene {
       fontSize: "22px",
       color: "#f2f8e8"
     };
-  }
-
-  itemStyle(color) {
-    return {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "20px",
-      color
-    };
-  }
-
-  lucideSvg(icon, size) {
-    const children = icon
-      .map(([tag, attrs]) => {
-        const attrText = Object.entries(attrs)
-          .map(([key, value]) => `${key}="${String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"`)
-          .join(" ");
-        return `<${tag} ${attrText}></${tag}>`;
-      })
-      .join("");
-
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${children}</svg>`;
-  }
-
-  destroyEditButtons() {
-    this.scale?.off("resize", this.positionPencilButtons, this);
-    this.menuItems?.forEach((item) => item.editButton?.remove());
-    this.editButtons?.forEach((item) => item.button.remove());
-    this.editButtons = [];
   }
 }

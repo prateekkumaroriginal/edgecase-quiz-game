@@ -1,6 +1,7 @@
 import { QUESTIONS } from "../data/questions.js";
 import { UPGRADES } from "../data/upgrades.js";
 import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
+import { getMusicVolume, getSoundEnabled, getSoundVolume } from "../settings.js";
 
 const CHALLENGE_SECONDS = 18;
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
@@ -44,6 +45,8 @@ export class GameScene extends Phaser.Scene {
     this.merchantRequiresSpaceRelease = false;
     this.merchantChargeOsc = null;
     this.merchantChargeGain = null;
+    this.musicEvent = null;
+    this.musicStep = 0;
     this.audioReady = false;
 
     this.upgrades = {
@@ -72,6 +75,10 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
     this.cameras.main.setBounds(0, 0, this.worldWidth, 720);
     this.physics.world.setBounds(0, 0, this.worldWidth, 720);
+    this.input.once("pointerdown", () => this.ensureAudio());
+    this.input.keyboard.once("keydown", () => this.ensureAudio());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopMusic());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.stopMusic());
   }
 
   getActiveLevel() {
@@ -82,6 +89,11 @@ export class GameScene extends Phaser.Scene {
 
     const selectedLevelId = this.registry.get("selectedLevelId") || DEFAULT_LEVEL_ID;
     const devSavedLevels = IS_DEV ? this.registry.get("devSavedLevels") || [] : [];
+    if (IS_DEV && this.registry.get("devSavedLevelsLoaded")) {
+      const level = devSavedLevels.find((item) => item.id === selectedLevelId) || devSavedLevels[0] || LEVELS[0];
+      return structuredClone(level);
+    }
+
     const levelsById = new Map(LEVELS.map((item) => [item.id, item]));
     for (const item of devSavedLevels) {
       levelsById.set(item.id, item);
@@ -1027,6 +1039,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   startMerchantChargeTone() {
+    if (!getSoundEnabled()) {
+      this.stopMerchantChargeTone();
+      return;
+    }
+
     const audio = this.ensureAudio();
     if (!audio || !this.masterGain || this.merchantChargeOsc) {
       return;
@@ -1045,6 +1062,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateMerchantChargeTone(progress) {
+    if (!getSoundEnabled()) {
+      this.stopMerchantChargeTone();
+      return;
+    }
+
     if (!this.audioContext || !this.merchantChargeOsc || !this.merchantChargeGain) {
       return;
     }
@@ -1245,6 +1267,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   ensureAudio() {
+    if (!getSoundEnabled()) {
+      this.stopMerchantChargeTone();
+      this.stopMusic();
+      return null;
+    }
+
     if (!this.audioContext) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) {
@@ -1252,18 +1280,28 @@ export class GameScene extends Phaser.Scene {
       }
       this.audioContext = new AudioContextClass();
       this.masterGain = this.audioContext.createGain();
-      this.masterGain.gain.value = 0.14;
+      this.musicGain = this.audioContext.createGain();
+      this.masterGain.gain.value = 0.24;
+      this.musicGain.gain.value = 0.001;
       this.masterGain.connect(this.audioContext.destination);
+      this.musicGain.connect(this.audioContext.destination);
     }
 
     if (this.audioContext.state === "suspended") {
       this.audioContext.resume();
     }
 
+    this.updateMusicVolume();
+    this.startMusic();
     return this.audioContext;
   }
 
   playTone(type) {
+    if (!getSoundEnabled()) {
+      this.stopMerchantChargeTone();
+      return;
+    }
+
     const audio = this.ensureAudio();
     if (!audio || !this.masterGain) {
       return;
@@ -1271,21 +1309,22 @@ export class GameScene extends Phaser.Scene {
 
     const now = audio.currentTime;
     const presets = {
-      coin: { frequency: 920, end: 1320, duration: 0.08, wave: "square", gain: 0.22 },
-      jump: { frequency: 260, end: 440, duration: 0.09, wave: "triangle", gain: 0.16 },
-      dash: { frequency: 180, end: 90, duration: 0.11, wave: "sawtooth", gain: 0.12 },
-      correct: { frequency: 520, end: 880, duration: 0.18, wave: "triangle", gain: 0.2 },
-      wrong: { frequency: 180, end: 90, duration: 0.2, wave: "sawtooth", gain: 0.13 },
-      timeout: { frequency: 150, end: 70, duration: 0.26, wave: "sawtooth", gain: 0.11 },
-      hit: { frequency: 120, end: 55, duration: 0.16, wave: "square", gain: 0.16 },
-      shield: { frequency: 360, end: 620, duration: 0.14, wave: "triangle", gain: 0.18 },
-      buy: { frequency: 420, end: 760, duration: 0.16, wave: "triangle", gain: 0.18 },
-      deny: { frequency: 160, end: 145, duration: 0.11, wave: "square", gain: 0.12 },
-      menu: { frequency: 340, end: 420, duration: 0.07, wave: "triangle", gain: 0.1 },
-      pause: { frequency: 260, end: 180, duration: 0.1, wave: "triangle", gain: 0.1 },
-      resume: { frequency: 180, end: 260, duration: 0.1, wave: "triangle", gain: 0.1 }
+      coin: { frequency: 920, end: 1320, duration: 0.08, wave: "square", gain: 0.32 },
+      jump: { frequency: 260, end: 440, duration: 0.09, wave: "triangle", gain: 0.24 },
+      dash: { frequency: 180, end: 90, duration: 0.11, wave: "sawtooth", gain: 0.2 },
+      correct: { frequency: 520, end: 880, duration: 0.18, wave: "triangle", gain: 0.3 },
+      wrong: { frequency: 180, end: 90, duration: 0.2, wave: "sawtooth", gain: 0.22 },
+      timeout: { frequency: 150, end: 70, duration: 0.26, wave: "sawtooth", gain: 0.18 },
+      hit: { frequency: 120, end: 55, duration: 0.16, wave: "square", gain: 0.26 },
+      shield: { frequency: 360, end: 620, duration: 0.14, wave: "triangle", gain: 0.28 },
+      buy: { frequency: 420, end: 760, duration: 0.16, wave: "triangle", gain: 0.3 },
+      deny: { frequency: 160, end: 145, duration: 0.11, wave: "square", gain: 0.2 },
+      menu: { frequency: 340, end: 420, duration: 0.07, wave: "triangle", gain: 0.16 },
+      pause: { frequency: 260, end: 180, duration: 0.1, wave: "triangle", gain: 0.18 },
+      resume: { frequency: 180, end: 260, duration: 0.1, wave: "triangle", gain: 0.18 }
     };
     const preset = presets[type] || presets.menu;
+    const effectVolume = getSoundVolume();
 
     const osc = audio.createOscillator();
     const gain = audio.createGain();
@@ -1293,12 +1332,65 @@ export class GameScene extends Phaser.Scene {
     osc.frequency.setValueAtTime(preset.frequency, now);
     osc.frequency.exponentialRampToValueAtTime(Math.max(1, preset.end), now + preset.duration);
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.exponentialRampToValueAtTime(preset.gain, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.001, preset.gain * effectVolume), now + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, now + preset.duration);
     osc.connect(gain);
     gain.connect(this.masterGain);
     osc.start(now);
     osc.stop(now + preset.duration + 0.02);
+  }
+
+  startMusic() {
+    return;
+  }
+
+  stopMusic() {
+    this.musicEvent?.remove(false);
+    this.musicEvent = null;
+    if (this.musicGain && this.audioContext) {
+      this.musicGain.gain.setTargetAtTime(0.001, this.audioContext.currentTime, 0.04);
+    }
+  }
+
+  updateMusicVolume() {
+    if (!this.musicGain || !this.audioContext) {
+      return;
+    }
+    const volume = getSoundEnabled() ? getMusicVolume() * 0.32 : 0;
+    this.musicGain.gain.setTargetAtTime(Math.max(0.001, volume), this.audioContext.currentTime, 0.08);
+  }
+
+  playMusicStep() {
+    if (!this.audioContext || !this.musicGain || !getSoundEnabled()) {
+      this.stopMusic();
+      return;
+    }
+
+    this.updateMusicVolume();
+    const now = this.audioContext.currentTime;
+    const bass = [82.41, 82.41, 110, 98, 73.42, 73.42, 98, 110];
+    const lead = [329.63, 0, 392, 440, 493.88, 0, 440, 392];
+    const step = this.musicStep % bass.length;
+    this.playMusicNote(bass[step], 0.32, 0.18, "triangle", now);
+    this.playMusicNote(bass[step] * 2, 0.2, 0.055, "sawtooth", now + 0.02);
+    if (lead[step]) {
+      this.playMusicNote(lead[step], 0.2, 0.11, "square", now + 0.03);
+    }
+    this.musicStep += 1;
+  }
+
+  playMusicNote(frequency, duration, gainValue, wave, startTime) {
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(frequency, startTime);
+    gain.gain.setValueAtTime(0.001, startTime);
+    gain.gain.exponentialRampToValueAtTime(gainValue, startTime + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.02);
   }
 
   pickQuestion(difficulty, offset) {
