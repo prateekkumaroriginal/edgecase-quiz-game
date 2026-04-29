@@ -33,6 +33,10 @@ const GROUND_TOP = GROUND_Y - GROUND_HEIGHT / 2;
 const HUD_LEFT_WIDTH = 246;
 const HUD_RIGHT_X = 1035;
 const WORLD_VIEW_WIDTH = HUD_RIGHT_X - HUD_LEFT_WIDTH;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
+const ZOOM_STEP = 0.1;
+const DEFAULT_ZOOM = 1;
 
 const FIELD_CONFIG = {
   platform: [
@@ -63,6 +67,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.selected = null;
     this.selection = [];
     this.dragging = null;
+    this.cameraDrag = null;
     this.areaSelection = null;
     this.hoveredObject = null;
     this.hudVisible = true;
@@ -107,10 +112,8 @@ export class LevelEditorScene extends Phaser.Scene {
   createInputs() {
     this.input.on("pointerdown", (pointer) => this.onPointerDown(pointer));
     this.input.on("pointermove", (pointer) => this.onPointerMove(pointer));
-    this.input.on("pointerup", () => {
-      this.finishAreaSelection();
-      this.dragging = null;
-    });
+    this.input.on("pointerup", () => this.onPointerUp());
+    this.input.on("wheel", (pointer, _objects, dx, dy, event) => this.onWheel(pointer, dx, dy, event));
 
     this.keys = this.input.keyboard.addKeys({
       left: Phaser.Input.Keyboard.KeyCodes.LEFT,
@@ -120,6 +123,8 @@ export class LevelEditorScene extends Phaser.Scene {
       c: Phaser.Input.Keyboard.KeyCodes.C,
       p: Phaser.Input.Keyboard.KeyCodes.P,
       ctrl: Phaser.Input.Keyboard.KeyCodes.CTRL,
+      shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      zero: Phaser.Input.Keyboard.KeyCodes.ZERO,
       i: Phaser.Input.Keyboard.KeyCodes.I,
       esc: Phaser.Input.Keyboard.KeyCodes.ESC
     });
@@ -130,6 +135,9 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot = document.createElement("div");
     this.hudRoot.className = "pointer-events-none absolute inset-0 z-10 font-mono text-[#edf8ed]";
     this.hudRoot.innerHTML = `
+      <div data-zoom-indicator class="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-1 text-xs font-bold text-[#f4e786] shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+        ZOOM 100%
+      </div>
       <aside data-left-panel class="pointer-events-auto absolute left-0 top-0 flex h-full w-[246px] flex-col border-r border-[#385346] bg-[#06100e]/95 p-4 shadow-[18px_0_36px_rgba(0,0,0,0.35)]">
         <div class="font-[EdgecaseTitle] text-3xl text-[#e7d66b]">LEVEL MAKER</div>
         <div class="mt-2 text-xs text-[#8fa89d]">Ctrl+I hides panels</div>
@@ -167,6 +175,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.inspectorEl = this.hudRoot.querySelector("[data-inspector]");
     this.messageEl = this.hudRoot.querySelector("[data-message]");
     this.statusEl = this.hudRoot.querySelector("[data-save-status]");
+    this.zoomIndicatorEl = this.hudRoot.querySelector("[data-zoom-indicator]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
     this.nameInputEl.addEventListener("input", () => {
       this.draft.name = this.nameInputEl.value;
@@ -195,6 +204,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.renderInspector();
     this.savedSnapshot = this.serializeDraft();
     this.updateSaveStatus();
+    this.updateZoomIndicator();
   }
 
   update() {
@@ -203,11 +213,17 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     const speed = 16;
-    const maxScroll = Math.max(0, WORLD_WIDTH - this.cameras.main.width);
     if (this.keys.left.isDown) {
-      this.cameras.main.scrollX = Math.max(0, this.cameras.main.scrollX - speed);
+      this.cameras.main.scrollX -= speed;
+      this.clampCameraScroll();
     } else if (this.keys.right.isDown) {
-      this.cameras.main.scrollX = Math.min(maxScroll, this.cameras.main.scrollX + speed);
+      this.cameras.main.scrollX += speed;
+      this.clampCameraScroll();
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.zero) && this.keys.ctrl.isDown) {
+      this.resetCanvasZoom();
+      return;
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.i) && this.keys.ctrl.isDown) {
@@ -244,10 +260,72 @@ export class LevelEditorScene extends Phaser.Scene {
     }
   }
 
+  onWheel(pointer, dx, dy, event) {
+    if (!this.pointerInsideWorldViewport(pointer)) return;
+
+    const ctrlDown = pointer.event?.ctrlKey || event?.ctrlKey || this.keys.ctrl.isDown;
+    if (!ctrlDown) {
+      pointer.event?.preventDefault?.();
+      event?.preventDefault?.();
+      this.panCanvasByWheel(dx, dy);
+      return;
+    }
+
+    pointer.event?.preventDefault?.();
+    event?.preventDefault?.();
+
+    const direction = dy > 0 ? -1 : 1;
+    const nextZoom = Phaser.Math.Clamp(
+      this.cameras.main.zoom + direction * ZOOM_STEP,
+      MIN_ZOOM,
+      MAX_ZOOM
+    );
+
+    this.setCanvasZoom(nextZoom, pointer);
+  }
+
+  panCanvasByWheel(dx, dy) {
+    const camera = this.cameras.main;
+    camera.scrollX += dx / camera.zoom;
+    camera.scrollY += dy / camera.zoom;
+    this.clampCameraScroll();
+  }
+
+  setCanvasZoom(nextZoom, pointer = null) {
+    const camera = this.cameras.main;
+    if (Math.abs(camera.zoom - nextZoom) < 0.001) return;
+
+    const anchorWorld = pointer && this.pointerInsideWorldViewport(pointer)
+      ? this.worldPointFromPointer(pointer)
+      : null;
+
+    camera.setZoom(nextZoom);
+
+    if (anchorWorld) {
+      const pointerWorld = camera.getWorldPoint(pointer.x, pointer.y);
+      camera.scrollX += anchorWorld.x - pointerWorld.x;
+      camera.scrollY += anchorWorld.y - pointerWorld.y;
+    }
+
+    this.clampCameraScroll();
+    this.updateZoomIndicator();
+  }
+
+  resetCanvasZoom() {
+    this.cameras.main.setZoom(DEFAULT_ZOOM);
+    this.clampCameraScroll();
+    this.updateZoomIndicator();
+  }
+
   onPointerDown(pointer) {
     this.blurActiveDomField();
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) return;
+
+    if (this.keys.shift.isDown) {
+      this.startCameraDrag(pointer);
+      return;
+    }
 
     const world = this.snapPoint(worldPoint.x, worldPoint.y);
     const hit = this.findObjectAt(world.x, world.y);
@@ -285,6 +363,11 @@ export class LevelEditorScene extends Phaser.Scene {
       return;
     }
 
+    if (this.cameraDrag) {
+      this.updateCameraDrag(pointer);
+      return;
+    }
+
     const world = this.snapPoint(worldPoint.x, worldPoint.y);
     if (this.areaSelection) {
       this.updateAreaSelection(world.x, world.y);
@@ -307,6 +390,33 @@ export class LevelEditorScene extends Phaser.Scene {
     }
     this.refreshInspectorValues();
     this.markDirty();
+  }
+
+  onPointerUp() {
+    this.finishAreaSelection();
+    this.dragging = null;
+    this.cameraDrag = null;
+    this.input.setDefaultCursor("default");
+  }
+
+  startCameraDrag(pointer) {
+    this.cameraDrag = {
+      startPointerX: pointer.x,
+      startPointerY: pointer.y,
+      startScrollX: this.cameras.main.scrollX,
+      startScrollY: this.cameras.main.scrollY
+    };
+    this.input.setDefaultCursor("grabbing");
+  }
+
+  updateCameraDrag(pointer) {
+    const camera = this.cameras.main;
+    const dx = (pointer.x - this.cameraDrag.startPointerX) / camera.zoom;
+    const dy = (pointer.y - this.cameraDrag.startPointerY) / camera.zoom;
+
+    camera.scrollX = this.cameraDrag.startScrollX - dx;
+    camera.scrollY = this.cameraDrag.startScrollY - dy;
+    this.clampCameraScroll();
   }
 
   createDataForTool(x, y) {
@@ -838,7 +948,29 @@ export class LevelEditorScene extends Phaser.Scene {
     const x = this.hudVisible ? HUD_LEFT_WIDTH : 0;
     const width = this.hudVisible ? WORLD_VIEW_WIDTH : 1280;
     this.cameras.main.setViewport(x, 0, width, WORLD_HEIGHT);
-    this.cameras.main.scrollX = Phaser.Math.Clamp(this.cameras.main.scrollX, 0, Math.max(0, WORLD_WIDTH - width));
+    this.clampCameraScroll();
+  }
+
+  clampCameraScroll() {
+    const camera = this.cameras.main;
+    const visibleWorldWidth = camera.width / camera.zoom;
+    const visibleWorldHeight = camera.height / camera.zoom;
+
+    camera.scrollX = Phaser.Math.Clamp(
+      camera.scrollX,
+      0,
+      Math.max(0, WORLD_WIDTH - visibleWorldWidth)
+    );
+    camera.scrollY = Phaser.Math.Clamp(
+      camera.scrollY,
+      0,
+      Math.max(0, WORLD_HEIGHT - visibleWorldHeight)
+    );
+  }
+
+  updateZoomIndicator() {
+    if (!this.zoomIndicatorEl) return;
+    this.zoomIndicatorEl.textContent = `ZOOM ${Math.round(this.cameras.main.zoom * 100)}%`;
   }
 
   updateToolButtons() {
@@ -907,22 +1039,23 @@ export class LevelEditorScene extends Phaser.Scene {
     };
   }
 
-  worldPointFromPointer(pointer) {
+  pointerInsideWorldViewport(pointer) {
     const camera = this.cameras.main;
-    const insideViewport =
+    return (
       pointer.x >= camera.x &&
       pointer.x <= camera.x + camera.width &&
       pointer.y >= camera.y &&
-      pointer.y <= camera.y + camera.height;
+      pointer.y <= camera.y + camera.height
+    );
+  }
 
-    if (!insideViewport) {
+  worldPointFromPointer(pointer) {
+    const camera = this.cameras.main;
+    if (!this.pointerInsideWorldViewport(pointer)) {
       return null;
     }
 
-    return {
-      x: camera.scrollX + ((pointer.x - camera.x) / camera.zoom),
-      y: camera.scrollY + ((pointer.y - camera.y) / camera.zoom)
-    };
+    return camera.getWorldPoint(pointer.x, pointer.y);
   }
 
   clampDataToWorld(type, data) {
