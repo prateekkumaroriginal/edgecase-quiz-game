@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide";
+import { Group, Ungroup, Trash2 } from "lucide";
 import { LEVELS } from "../data/levels.js";
 
 const TOOL_DEFS = [
@@ -29,6 +29,7 @@ const WORLD_WIDTH = 4300;
 const WORLD_HEIGHT = 720;
 const GROUND_Y = 684;
 const GROUND_HEIGHT = 64;
+const GROUND_TOP = GROUND_Y - GROUND_HEIGHT / 2;
 const HUD_LEFT_WIDTH = 246;
 const HUD_RIGHT_X = 1035;
 const WORLD_VIEW_WIDTH = HUD_RIGHT_X - HUD_LEFT_WIDTH;
@@ -60,7 +61,9 @@ export class LevelEditorScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#07100f");
     this.activeTool = null;
     this.selected = null;
+    this.selection = [];
     this.dragging = null;
+    this.areaSelection = null;
     this.hoveredObject = null;
     this.hudVisible = true;
     this.savedSnapshot = null;
@@ -105,6 +108,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.input.on("pointerdown", (pointer) => this.onPointerDown(pointer));
     this.input.on("pointermove", (pointer) => this.onPointerMove(pointer));
     this.input.on("pointerup", () => {
+      this.finishAreaSelection();
       this.dragging = null;
     });
 
@@ -249,14 +253,19 @@ export class LevelEditorScene extends Phaser.Scene {
     const world = this.snapPoint(worldPoint.x, worldPoint.y);
     const hit = this.findObjectAt(world.x, world.y);
     if (hit) {
-      this.selectObject(hit);
-      this.dragging = { obj: hit, offsetX: hit.data.x - world.x, offsetY: hit.data.y - world.y };
+      const group = hit.data.groupId ? this.objects.filter((obj) => obj.data.groupId === hit.data.groupId) : [hit];
+      const targets = this.selection.includes(hit) ? this.selection : group;
+      this.selectObjects(targets, hit);
+      this.dragging = {
+        objects: targets.map((obj) => ({ obj, startX: obj.data.x, startY: obj.data.y })),
+        startX: world.x,
+        startY: world.y
+      };
       return;
     }
 
     if (!this.activeTool) {
-      this.clearSelection();
-      this.showMessage("Pick an item first");
+      this.startAreaSelection(world.x, world.y);
       return;
     }
 
@@ -278,15 +287,25 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     const world = this.snapPoint(worldPoint.x, worldPoint.y);
+    if (this.areaSelection) {
+      this.updateAreaSelection(world.x, world.y);
+      return;
+    }
+
     if (!this.dragging) {
       this.setHoveredObject(this.findObjectAt(world.x, world.y));
       return;
     }
 
-    this.dragging.obj.data.x = world.x + this.dragging.offsetX;
-    this.dragging.obj.data.y = world.y + this.dragging.offsetY;
-    this.clampDataToWorld(this.dragging.obj.type, this.dragging.obj.data);
-    this.syncVisual(this.dragging.obj);
+    const dx = world.x - this.dragging.startX;
+    const dy = world.y - this.dragging.startY;
+    const clampedDelta = this.clampedSelectionDelta(this.dragging.objects, dx, dy);
+    for (const item of this.dragging.objects) {
+      item.obj.data.x = item.startX + clampedDelta.dx;
+      item.obj.data.y = item.startY + clampedDelta.dy;
+      this.clampDataToWorld(item.obj.type, item.obj.data);
+      this.syncVisual(item.obj);
+    }
     this.refreshInspectorValues();
     this.markDirty();
   }
@@ -318,6 +337,7 @@ export class LevelEditorScene extends Phaser.Scene {
     if (type === "exitGate") this.draft.exitGate = data;
     if (type === "playerSpawn") this.draft.playerSpawn = data;
     if (type === "sign") this.draft.signs.push(data);
+    return data;
   }
 
   rebuildObjects() {
@@ -393,12 +413,78 @@ export class LevelEditorScene extends Phaser.Scene {
     return null;
   }
 
+  startAreaSelection(x, y) {
+    this.clearSelection();
+    const visual = this.add.rectangle(x, y, 1, 1, 0x6ad8b4, 0.12)
+      .setStrokeStyle(2, 0x8ee0c6, 0.95)
+      .setDepth(100);
+    this.areaSelection = { startX: x, startY: y, x, y, visual };
+  }
+
+  updateAreaSelection(x, y) {
+    if (!this.areaSelection) return;
+    this.areaSelection.x = x;
+    this.areaSelection.y = y;
+    const bounds = this.areaSelectionBounds();
+    this.areaSelection.visual.setPosition(bounds.centerX, bounds.centerY);
+    this.areaSelection.visual.setSize(bounds.width, bounds.height);
+    this.areaSelection.visual.setDisplaySize(bounds.width, bounds.height);
+  }
+
+  finishAreaSelection() {
+    if (!this.areaSelection) return;
+    const bounds = this.areaSelectionBounds();
+    const selected = bounds.width < 10 && bounds.height < 10
+      ? []
+      : this.objects.filter((obj) => Phaser.Geom.Intersects.RectangleToRectangle(bounds, obj.visual.getBounds()));
+    this.areaSelection.visual.destroy();
+    this.areaSelection = null;
+    if (selected.length > 0) {
+      this.selectObjects(selected);
+    } else {
+      this.clearSelection();
+      this.showMessage("Pick an item first");
+    }
+  }
+
+  areaSelectionBounds() {
+    const minX = Math.min(this.areaSelection.startX, this.areaSelection.x);
+    const minY = Math.min(this.areaSelection.startY, this.areaSelection.y);
+    const maxX = Math.max(this.areaSelection.startX, this.areaSelection.x);
+    const maxY = Math.max(this.areaSelection.startY, this.areaSelection.y);
+    return new Phaser.Geom.Rectangle(minX, minY, maxX - minX, maxY - minY);
+  }
+
+  clampedSelectionDelta(items, dx, dy) {
+    let minDx = -Infinity;
+    let maxDx = Infinity;
+    let minDy = -Infinity;
+    let maxDy = Infinity;
+    for (const { obj, startX, startY } of items) {
+      const size = this.objectSize(obj.type, obj.data);
+      minDx = Math.max(minDx, size.width / 2 - startX);
+      maxDx = Math.min(maxDx, WORLD_WIDTH - size.width / 2 - startX);
+      minDy = Math.max(minDy, size.height / 2 - startY);
+      maxDy = Math.min(maxDy, GROUND_TOP - size.height / 2 - startY);
+    }
+    return {
+      dx: Phaser.Math.Clamp(dx, minDx, maxDx),
+      dy: Phaser.Math.Clamp(dy, minDy, maxDy)
+    };
+  }
+
   selectObject(obj) {
-    this.selected = obj;
+    this.selectObjects([obj], obj);
+  }
+
+  selectObjects(objects, primary = objects[0] || null) {
+    this.selection = objects;
+    this.selected = primary;
     this.activeTool = null;
     this.objects.forEach((item) => {
       const colors = COLORS[item.type];
-      item.visual.setStrokeStyle(item === obj ? 5 : 3, item === obj ? 0xf4e786 : colors.stroke);
+      const selected = objects.includes(item);
+      item.visual.setStrokeStyle(selected ? 5 : 3, selected ? 0xf4e786 : colors.stroke);
       item.visual.setAlpha(1);
     });
     this.updateToolButtons();
@@ -411,9 +497,31 @@ export class LevelEditorScene extends Phaser.Scene {
       this.inspectorEl.innerHTML = `
         <div class="rounded-sm border border-[#385346] bg-[#0d1a16] p-3 text-sm leading-6 text-[#b8c7b5]">
           No object selected.<br><br>
-          Pick an item, click the maker area to place it, then drag placed objects. Escape clears selection.
+          Drag an empty area to select multiple items, or pick an item and drag it. Escape clears selection.
         </div>
       `;
+      return;
+    }
+
+    if (this.selection.length > 1) {
+      const grouped = this.selection.every((obj) => obj.data.groupId && obj.data.groupId === this.selection[0].data.groupId);
+      this.inspectorEl.innerHTML = `
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-lg font-bold uppercase tracking-wide text-[#f4e786]">${this.selection.length} SELECTED</div>
+          <button data-action="delete" aria-label="Delete selected" class="grid h-9 w-9 place-items-center rounded-sm border border-[#7b332d] bg-[#d65f4f] text-[#07100f] transition-colors hover:border-[#f07b6e] hover:bg-[#f07b6e]">${this.lucideSvg(Trash2, 18)}</button>
+        </div>
+        <div class="mt-5 grid grid-cols-1 gap-2">
+          <button data-action="duplicate" class="rounded-sm border border-[#b9a44c] bg-[#e7d66b] px-2 py-2 text-sm font-bold text-[#07100f] transition-colors hover:border-[#f4e786] hover:bg-[#f4e786]">DUPLICATE</button>
+          <button data-action="${grouped ? "ungroup" : "group"}" class="flex items-center justify-center gap-2 rounded-sm border border-[#6ad8b4] bg-[#3fa68f] px-2 py-2 text-sm font-bold text-[#07100f] transition-colors hover:border-[#8ee0c6] hover:bg-[#62cba8]">
+            ${this.lucideSvg(grouped ? Ungroup : Group, 17)}
+            ${grouped ? "UNGROUP" : "GROUP"}
+          </button>
+        </div>
+      `;
+      this.inspectorEl.querySelector("[data-action='duplicate']")?.addEventListener("click", () => this.duplicateSelected());
+      this.inspectorEl.querySelector("[data-action='delete']")?.addEventListener("click", () => this.deleteSelected());
+      this.inspectorEl.querySelector("[data-action='group']")?.addEventListener("click", () => this.groupSelected());
+      this.inspectorEl.querySelector("[data-action='ungroup']")?.addEventListener("click", () => this.ungroupSelected());
       return;
     }
 
@@ -478,30 +586,61 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   canDuplicateSelected() {
-    return this.selected && !["merchant", "exitGate", "playerSpawn"].includes(this.selected.type);
+    return this.selection.length > 0 && this.selection.every((obj) => !["merchant", "exitGate", "playerSpawn"].includes(obj.type));
   }
 
   duplicateSelected() {
     if (!this.canDuplicateSelected()) return;
-    const copy = { type: this.selected.type, ...structuredClone(this.selected.data), x: this.selected.data.x + 40, y: this.selected.data.y - 20 };
-    this.clampDataToWorld(copy.type, copy);
-    this.addData(copy);
+    const sourceGroupId = this.selection[0]?.data.groupId;
+    const shouldDuplicateAsGroup = this.selection.length > 1 && sourceGroupId && this.selection.every((obj) => obj.data.groupId === sourceGroupId);
+    const nextGroupId = shouldDuplicateAsGroup ? `group-${Date.now().toString(36)}` : null;
+    const copied = this.selection.map((obj) => {
+      const copy = { type: obj.type, ...structuredClone(obj.data), x: obj.data.x + 40, y: obj.data.y - 20 };
+      if (nextGroupId) {
+        copy.groupId = nextGroupId;
+      } else {
+        delete copy.groupId;
+      }
+      this.clampDataToWorld(copy.type, copy);
+      return this.addData(copy);
+    });
     this.rebuildObjects();
-    this.selectObject(this.objects[this.objects.length - 1]);
+    this.selectObjects(this.objects.filter((obj) => copied.includes(obj.data)));
     this.markDirty();
   }
 
   deleteSelected() {
     if (!this.selected) return;
-    const { type, data } = this.selected;
-    if (type === "merchant") this.draft.merchant = null;
-    else if (type === "exitGate") this.draft.exitGate = null;
-    else if (type === "playerSpawn") this.draft.playerSpawn = null;
-    else this.listForType(type).splice(this.listForType(type).indexOf(data), 1);
+    for (const { type, data } of this.selection) {
+      if (type === "merchant") this.draft.merchant = null;
+      else if (type === "exitGate") this.draft.exitGate = null;
+      else if (type === "playerSpawn") this.draft.playerSpawn = null;
+      else this.listForType(type).splice(this.listForType(type).indexOf(data), 1);
+    }
     this.selected = null;
+    this.selection = [];
     this.rebuildObjects();
     this.renderInspector();
     this.updateToolButtons();
+    this.markDirty();
+  }
+
+  groupSelected() {
+    if (this.selection.length < 2) return;
+    const groupId = `group-${Date.now().toString(36)}`;
+    this.selection.forEach((obj) => {
+      obj.data.groupId = groupId;
+    });
+    this.renderInspector();
+    this.markDirty();
+  }
+
+  ungroupSelected() {
+    if (this.selection.length < 1) return;
+    this.selection.forEach((obj) => {
+      delete obj.data.groupId;
+    });
+    this.renderInspector();
     this.markDirty();
   }
 
@@ -686,6 +825,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   clearSelection() {
     this.selected = null;
+    this.selection = [];
     this.clearObjectFocus();
     this.renderInspector();
   }
@@ -700,13 +840,13 @@ export class LevelEditorScene extends Phaser.Scene {
 
   setHoveredObject(obj) {
     if (this.hoveredObject === obj) return;
-    if (this.hoveredObject && this.hoveredObject !== this.selected) {
+    if (this.hoveredObject && !this.selection.includes(this.hoveredObject)) {
       const colors = COLORS[this.hoveredObject.type];
       this.hoveredObject.visual.setStrokeStyle(3, colors.stroke);
       this.hoveredObject.visual.setAlpha(1);
     }
     this.hoveredObject = obj;
-    if (obj && obj !== this.selected) {
+    if (obj && !this.selection.includes(obj)) {
       obj.visual.setStrokeStyle(4, 0x8ee0c6);
       obj.visual.setAlpha(0.86);
     }
@@ -812,7 +952,7 @@ export class LevelEditorScene extends Phaser.Scene {
   clampDataToWorld(type, data) {
     const size = this.objectSize(type, data);
     data.x = Phaser.Math.Clamp(data.x, size.width / 2, WORLD_WIDTH - size.width / 2);
-    data.y = Phaser.Math.Clamp(data.y, size.height / 2, WORLD_HEIGHT - size.height / 2);
+    data.y = Phaser.Math.Clamp(data.y, size.height / 2, GROUND_TOP - size.height / 2);
     if (type === "enemy") {
       data.min = Phaser.Math.Clamp(data.min, 0, WORLD_WIDTH);
       data.max = Phaser.Math.Clamp(data.max, 0, WORLD_WIDTH);
@@ -822,7 +962,7 @@ export class LevelEditorScene extends Phaser.Scene {
     }
     if (type === "merchant") {
       data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, WORLD_WIDTH - 30);
-      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, 43, WORLD_HEIGHT - 43);
+      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, 43, GROUND_TOP - 43);
     }
   }
 

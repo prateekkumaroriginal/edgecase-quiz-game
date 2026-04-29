@@ -273,8 +273,8 @@ export const LEVELS = [
     worldWidth: 4300,
     floorY: 652,
     playerSpawn: {
-      x: 260,
-      y: 500
+      x: 90,
+      y: 480
     },
     platforms: [
       {
@@ -284,20 +284,49 @@ export const LEVELS = [
         height: 64
       },
       {
-        x: 320,
-        y: 260,
+        x: 310,
+        y: 170,
         width: 220,
-        height: 34
+        height: 34,
+        groupId: "group-mojlb0u0"
+      },
+      {
+        x: 580,
+        y: 320,
+        width: 220,
+        height: 34,
+        groupId: "group-mojlb1gy"
       }
     ],
-    coins: [],
+    coins: [
+      {
+        x: 240,
+        y: 120,
+        groupId: "group-mojlb0u0"
+      },
+      {
+        x: 330,
+        y: 130,
+        groupId: "group-mojlb0u0"
+      },
+      {
+        x: 510,
+        y: 270,
+        groupId: "group-mojlb1gy"
+      },
+      {
+        x: 600,
+        y: 280,
+        groupId: "group-mojlb1gy"
+      }
+    ],
     hazards: [],
     enemies: [],
     challenges: [],
     merchant: null,
     exitGate: {
-      x: 440,
-      y: 570,
+      x: 750,
+      y: 470,
       width: 115,
       height: 138
     },

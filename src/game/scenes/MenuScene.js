@@ -2,6 +2,13 @@ import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
 import { Pencil } from "lucide";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
+const LEVEL_LIST_X = 110;
+const LEVEL_LIST_Y = 274;
+const LEVEL_BUTTON_WIDTH = 540;
+const LEVEL_BUTTON_HEIGHT = 42;
+const LEVEL_BUTTON_GAP = 52;
+const LEVEL_LABEL_X = LEVEL_LIST_X + 24;
+const LEVEL_LABEL_MAX_CHARS = 34;
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -16,7 +23,7 @@ export class MenuScene extends Phaser.Scene {
     this.levels = this.getSelectableLevels();
     this.editButtons = [];
     this.menuItems = [];
-    this.menuIndex = 1;
+    this.menuIndex = 0;
     this.cameras.main.setBackgroundColor("#07100f");
 
     this.add.rectangle(640, 360, 1280, 720, 0x07100f);
@@ -40,8 +47,7 @@ export class MenuScene extends Phaser.Scene {
       color: "#d7c96d"
     });
 
-    this.add.text(100, 230, "Difficulty", this.headingStyle());
-    this.add.text(465, 230, "Select level", this.headingStyle());
+    this.add.text(LEVEL_LIST_X, 230, "Select level", this.headingStyle());
 
     this.createMenuButtons();
 
@@ -49,21 +55,6 @@ export class MenuScene extends Phaser.Scene {
       fontFamily: "Cascadia Mono, Consolas, monospace",
       fontSize: "16px",
       color: "#d9e5d0"
-    });
-
-    this.add.text(870, 98, IS_DEV ? "DEV BUILD" : "MVP BUILD", {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "20px",
-      color: "#07100f",
-      backgroundColor: "#d8cd6c",
-      padding: { x: 14, y: 8 }
-    });
-
-    this.summaryText = this.add.text(870, 150, "", {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "20px",
-      color: "#edf8ed",
-      lineSpacing: 13
     });
 
     this.keys = this.input.keyboard.addKeys({
@@ -78,53 +69,38 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroyEditButtons());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.destroyEditButtons());
     this.updateMenuFocus();
-    this.updateSummary();
     this.refreshDevLevelsFromDisk();
   }
 
   createMenuButtons() {
-    this.createDifficultyButtons();
     this.createLevelButtons();
     this.createActionButtons();
   }
 
-  createDifficultyButtons() {
-    const difficulties = [
-      { id: "easy", label: "Easy", note: "Fewer hazards" },
-      { id: "normal", label: "Normal", note: "Balanced run" },
-      { id: "hard", label: "Hard", note: "Full pressure" }
-    ];
-
-    difficulties.forEach((difficulty, index) => {
-      const y = 282 + index * 60;
-      const rect = this.add.rectangle(230, y, 260, 44, 0x22312b).setStrokeStyle(2, 0xe9eedc).setInteractive({ useHandCursor: true });
-      const label = this.add.text(122, y - 15, difficulty.label, this.itemStyle("#f2f8e8"));
-      const note = this.add.text(390, y - 10, difficulty.note, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "15px",
-        color: "#b8c7b5"
-      });
-      const item = { type: "difficulty", id: difficulty.id, rect, label, note, select: () => this.selectDifficulty(difficulty.id) };
-      rect.on("pointerover", () => this.focusItem(item));
-      rect.on("pointerdown", item.select);
-      this.menuItems.push(item);
-    });
-  }
-
   createLevelButtons() {
     this.levels.forEach((level, index) => {
-      const y = 282 + index * 60;
-      const rect = this.add.rectangle(605, y, 285, 44, 0x22312b).setStrokeStyle(2, 0xe9eedc).setInteractive({ useHandCursor: true });
-      const label = this.add.text(480, y - 15, `${index + 1}. ${level.name}`, this.itemStyle("#f2f8e8"));
+      const y = LEVEL_LIST_Y + index * LEVEL_BUTTON_GAP;
+      const rect = this.add.rectangle(LEVEL_LIST_X + LEVEL_BUTTON_WIDTH / 2, y, LEVEL_BUTTON_WIDTH, LEVEL_BUTTON_HEIGHT, 0x22312b)
+        .setStrokeStyle(2, 0xe9eedc)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add.text(LEVEL_LABEL_X, y - 15, this.formatLevelLabel(index, level.name), this.itemStyle("#f2f8e8"));
       const item = { type: "level", id: level.id, rect, label, select: () => this.selectLevel(level.id) };
       rect.on("pointerover", () => this.focusItem(item));
       rect.on("pointerdown", item.select);
       if (IS_DEV) {
-        const editButton = this.createPencilButton(rect.x + rect.displayWidth / 2 - 22, rect.y, level);
+        const editButton = this.createPencilButton(rect.x + rect.displayWidth / 2 - 30, rect.y, level);
         item.editButton = editButton;
       }
       this.menuItems.push(item);
     });
+  }
+
+  formatLevelLabel(index, name) {
+    const prefix = `${index + 1}. `;
+    const cleanName = String(name || "Untitled").trim() || "Untitled";
+    const maxNameLength = Math.max(8, LEVEL_LABEL_MAX_CHARS - prefix.length);
+    const labelName = cleanName.length > maxNameLength ? `${cleanName.slice(0, maxNameLength - 3)}...` : cleanName;
+    return `${prefix}${labelName}`;
   }
 
   createPencilButton(x, y, level) {
@@ -206,7 +182,6 @@ export class MenuScene extends Phaser.Scene {
       this.levels = this.getSelectableLevels();
       this.rebuildMenuButtons();
       this.updateMenuFocus();
-      this.updateSummary();
     } catch (error) {
       console.warn("Could not refresh dev levels", error);
     }
@@ -255,16 +230,9 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start("GameScene");
   }
 
-  selectDifficulty(id) {
-    this.registry.set("difficulty", id);
-    this.updateMenuFocus();
-    this.updateSummary();
-  }
-
   selectLevel(id) {
     this.registry.set("selectedLevelId", id);
     this.updateMenuFocus();
-    this.updateSummary();
   }
 
   editLevel(id) {
@@ -275,17 +243,11 @@ export class MenuScene extends Phaser.Scene {
   }
 
   updateMenuFocus() {
-    const selectedDifficulty = this.registry.get("difficulty");
     const selectedLevelId = this.registry.get("selectedLevelId");
 
     this.menuItems.forEach((item, index) => {
       const focused = this.menuIndex === index;
-      if (item.type === "difficulty") {
-        const selected = selectedDifficulty === item.id;
-        item.rect.setFillStyle(selected ? 0xb9a44c : 0x22312b);
-        item.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
-        item.label.setColor(selected ? "#07100f" : "#f2f8e8");
-      } else if (item.type === "level") {
+      if (item.type === "level") {
         const selected = selectedLevelId === item.id;
         item.rect.setFillStyle(selected ? 0x2f5546 : 0x22312b);
         item.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe9eedc);
@@ -294,11 +256,6 @@ export class MenuScene extends Phaser.Scene {
         item.rect.setStrokeStyle(focused ? 5 : 3, focused ? 0xf4e786 : 0x101814);
       }
     });
-  }
-
-  updateSummary() {
-    const level = this.levels.find((item) => item.id === this.registry.get("selectedLevelId")) || this.levels[0];
-    this.summaryText.setText(`${this.levels.length} selectable level${this.levels.length === 1 ? "" : "s"}\n${level.name}\n${level.challenges.length} challenge zones\n1 merchant\n4 upgrades\n16 tech questions`);
   }
 
   getSelectableLevels() {
@@ -316,13 +273,13 @@ export class MenuScene extends Phaser.Scene {
 
   drawCircuitBackdrop() {
     const graphics = this.add.graphics();
-    graphics.lineStyle(2, 0x1d5f52, 0.38);
+    graphics.lineStyle(2, 0x1d5f52, 0.28);
     for (let i = 0; i < 18; i += 1) {
-      const x = 760 + (i % 5) * 90;
-      const y = 230 + Math.floor(i / 5) * 62;
+      const x = 785 + (i % 5) * 90;
+      const y = 245 + Math.floor(i / 5) * 62;
       graphics.strokeLineShape(new Phaser.Geom.Line(x, y, x + 58, y));
       graphics.strokeLineShape(new Phaser.Geom.Line(x + 58, y, x + 58, y + 38));
-      graphics.fillStyle(i % 3 === 0 ? 0xd8cd6c : 0x3fa68f, 0.7);
+      graphics.fillStyle(i % 3 === 0 ? 0xd8cd6c : 0x3fa68f, 0.58);
       graphics.fillCircle(x + 58, y + 38, 5);
     }
   }

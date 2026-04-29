@@ -1307,13 +1307,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   addPlatform(x, y, width, height) {
-    const tileCount = Math.ceil(width / 64);
-    for (let i = 0; i < tileCount; i += 1) {
-      const tileX = x - width / 2 + 32 + i * 64;
-      const tile = this.platforms.create(tileX, y, "platform");
-      tile.setDisplaySize(Math.min(64, width - i * 64), height);
-      tile.refreshBody();
-    }
+    const platform = this.platforms.create(x, y, "platform");
+    platform.setDisplaySize(width, height);
+    platform.refreshBody();
   }
 
   signStyle() {
