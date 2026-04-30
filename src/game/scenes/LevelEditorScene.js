@@ -42,7 +42,7 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
 const DEFAULT_ZOOM = 1;
-const GRID_SIZES = [8, 16, 32, 64];
+const GRID_SIZES = [4, 8, 16, 32, 64];
 const DEFAULT_GRID_SIZE = 16;
 
 const FIELD_CONFIG = {
