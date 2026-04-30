@@ -42,6 +42,8 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
 const DEFAULT_ZOOM = 1;
+const GRID_SIZES = [8, 16, 32, 64];
+const DEFAULT_GRID_SIZE = 16;
 
 const FIELD_CONFIG = {
   platform: [
@@ -76,6 +78,9 @@ export class LevelEditorScene extends Phaser.Scene {
     this.areaSelection = null;
     this.hoveredObject = null;
     this.hudVisible = true;
+    this.gridSize = DEFAULT_GRID_SIZE;
+    this.snapEnabled = true;
+    this.cursorWorldPoint = null;
     this.savedSnapshot = null;
     this.nextChallenge = 1;
     this.draft = this.makeDraftLevel();
@@ -122,6 +127,7 @@ export class LevelEditorScene extends Phaser.Scene {
       p: Phaser.Input.Keyboard.KeyCodes.P,
       ctrl: Phaser.Input.Keyboard.KeyCodes.CTRL,
       shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+      alt: Phaser.Input.Keyboard.KeyCodes.ALT,
       zero: Phaser.Input.Keyboard.KeyCodes.ZERO,
       i: Phaser.Input.Keyboard.KeyCodes.I,
       esc: Phaser.Input.Keyboard.KeyCodes.ESC
@@ -138,6 +144,13 @@ export class LevelEditorScene extends Phaser.Scene {
         <button data-zoom-indicator type="button" title="Reset zoom" class="h-8 min-w-24 px-3 transition hover:bg-[#102019] hover:text-[#fff3a6]">ZOOM 100%</button>
         <button data-zoom-in type="button" title="Zoom in" class="grid h-8 w-8 place-items-center border-l border-[#385346] text-lg leading-none transition hover:bg-[#102019] hover:text-[#fff3a6]">+</button>
       </div>
+      <div data-grid-control class="pointer-events-auto absolute left-1/2 top-14 flex -translate-x-1/2 items-center overflow-hidden rounded-sm border border-[#385346] bg-[#06100e]/90 text-xs font-bold text-[#edf8ed] shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+        <div class="border-r border-[#385346] px-3 text-[#8fa89d]">GRID</div>
+        ${GRID_SIZES.map((size) => `<button data-grid-size="${size}" type="button" title="Grid ${size}px" class="h-8 min-w-10 border-r border-[#385346] px-2 transition hover:bg-[#102019] hover:text-[#fff3a6]">${size}</button>`).join("")}
+        <button data-snap-toggle type="button" title="Toggle snapping" class="h-8 min-w-24 border-r border-[#385346] px-3 transition hover:bg-[#102019] hover:text-[#fff3a6]">SNAP ON</button>
+        <div data-snap-modifier class="min-w-20 px-3 text-center text-[#8fa89d]">ALT: SNAP</div>
+      </div>
+      <div data-cursor-coords class="pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8fa89d] shadow-[0_8px_24px_rgba(0,0,0,0.3)]">X: ---- Y: ----</div>
       <aside data-left-panel class="pointer-events-auto absolute left-0 top-0 flex h-full w-[246px] flex-col border-r border-[#385346] bg-[#06100e]/95 p-4 shadow-[18px_0_36px_rgba(0,0,0,0.35)]">
         <div class="font-[EdgecaseTitle] text-3xl text-[#e7d66b]">LEVEL MAKER</div>
         <div class="mt-2 text-xs text-[#8fa89d]">Ctrl+I hides panels</div>
@@ -187,6 +200,9 @@ export class LevelEditorScene extends Phaser.Scene {
     this.messageEl = this.hudRoot.querySelector("[data-message]");
     this.statusEl = this.hudRoot.querySelector("[data-save-status]");
     this.zoomIndicatorEl = this.hudRoot.querySelector("[data-zoom-indicator]");
+    this.snapToggleEl = this.hudRoot.querySelector("[data-snap-toggle]");
+    this.snapModifierEl = this.hudRoot.querySelector("[data-snap-modifier]");
+    this.cursorCoordsEl = this.hudRoot.querySelector("[data-cursor-coords]");
     this.worldWidthInputEl = this.hudRoot.querySelector("[data-world-width]");
     this.worldHeightInputEl = this.hudRoot.querySelector("[data-world-height]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
@@ -199,6 +215,17 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot.querySelector("[data-zoom-out]").addEventListener("click", () => this.adjustCanvasZoom(-ZOOM_STEP));
     this.hudRoot.querySelector("[data-zoom-in]").addEventListener("click", () => this.adjustCanvasZoom(ZOOM_STEP));
     this.zoomIndicatorEl.addEventListener("click", () => this.resetCanvasZoom());
+    this.snapToggleEl.addEventListener("click", () => {
+      this.snapEnabled = !this.snapEnabled;
+      this.updateGridControls();
+    });
+    this.hudRoot.querySelectorAll("[data-grid-size]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.gridSize = Number(button.dataset.gridSize) || DEFAULT_GRID_SIZE;
+        this.redrawWorldChrome();
+        this.updateGridControls();
+      });
+    });
 
     TOOL_DEFS.forEach((tool) => {
       const button = document.createElement("button");
@@ -224,6 +251,8 @@ export class LevelEditorScene extends Phaser.Scene {
     this.savedSnapshot = this.serializeDraft();
     this.updateSaveStatus();
     this.updateZoomIndicator();
+    this.updateGridControls();
+    this.updateCursorCoordinates();
   }
 
   update() {
@@ -244,6 +273,8 @@ export class LevelEditorScene extends Phaser.Scene {
       this.resetCanvasZoom();
       return;
     }
+
+    this.updateGridControls();
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.i) && this.keys.ctrl.isDown) {
       this.toggleHud();
@@ -427,13 +458,15 @@ export class LevelEditorScene extends Phaser.Scene {
 
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) return;
+    this.cursorWorldPoint = worldPoint;
+    this.updateCursorCoordinates();
 
     if (this.keys.shift.isDown) {
       this.startCameraDrag(pointer);
       return;
     }
 
-    const world = this.snapPoint(worldPoint.x, worldPoint.y);
+    const world = this.snapPoint(worldPoint.x, worldPoint.y, pointer);
     const hit = this.findObjectAt(world.x, world.y);
     if (hit) {
       const group = hit.data.groupId ? this.objects.filter((obj) => obj.data.groupId === hit.data.groupId) : [hit];
@@ -469,19 +502,23 @@ export class LevelEditorScene extends Phaser.Scene {
   onPointerMove(pointer) {
     const worldPoint = this.worldPointFromPointer(pointer);
     if (!worldPoint) {
+      this.cursorWorldPoint = null;
+      this.updateCursorCoordinates();
       this.setHoveredObject(null);
       if (!pointer.isDown && (this.areaSelection || this.dragging || this.cameraDrag)) {
         this.cancelPointerInteraction();
       }
       return;
     }
+    this.cursorWorldPoint = worldPoint;
+    this.updateCursorCoordinates();
 
     if (this.cameraDrag) {
       this.updateCameraDrag(pointer);
       return;
     }
 
-    const world = this.snapPoint(worldPoint.x, worldPoint.y);
+    const world = this.snapPoint(worldPoint.x, worldPoint.y, pointer);
     if (this.areaSelection) {
       this.updateAreaSelection(world.x, world.y);
       return;
@@ -667,27 +704,50 @@ export class LevelEditorScene extends Phaser.Scene {
     graphics.fillStyle(0x07100f, 1);
     graphics.fillRect(0, 0, width, height);
 
-    graphics.lineStyle(1, 0x2f4b3e, 0.35);
-    for (let x = 0; x <= width; x += 100) {
-      graphics.strokeLineShape(new Phaser.Geom.Line(x, 0, x, height));
-    }
-    for (let y = 0; y <= height; y += 60) {
-      graphics.strokeLineShape(new Phaser.Geom.Line(0, y, width, y));
-    }
+    this.drawWorldGrid(graphics, width, height);
 
-    graphics.fillStyle(0x17231d, 0.8);
+    graphics.fillStyle(0x17231d, 0.9);
     graphics.fillRect(0, groundY - GROUND_HEIGHT / 2, width, GROUND_HEIGHT);
+    graphics.lineStyle(4, 0xf4e786, 1);
+    graphics.strokeLineShape(new Phaser.Geom.Line(0, this.groundTop(), width, this.groundTop()));
     graphics.lineStyle(3, 0xb9a44c, 1);
     graphics.strokeRect(0, groundY - GROUND_HEIGHT / 2, width, GROUND_HEIGHT);
 
-    graphics.lineStyle(3, 0xd65f4f, 0.9);
+    graphics.lineStyle(5, 0xff6b5e, 1);
     graphics.strokeLineShape(new Phaser.Geom.Line(0, 0, width, 0));
+    graphics.lineStyle(3, 0xd65f4f, 0.9);
     graphics.strokeLineShape(new Phaser.Geom.Line(width, 0, width, height));
     graphics.lineStyle(2, 0xd65f4f, 0.28);
     graphics.strokeRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
     this.worldChrome.add(graphics);
 
+    const topLabel = this.add.text(14, 8, "TOP", this.smallStyle("#ffb0a6")).setDepth(-19);
+    const groundLabel = this.add.text(14, this.groundTop() - 22, "GROUND", this.smallStyle("#f4e786")).setDepth(-19);
+    this.worldChrome.add([topLabel, groundLabel]);
+
     this.cameras.main.setBounds(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
+  }
+
+  drawWorldGrid(graphics, width, height) {
+    const size = this.gridSize || DEFAULT_GRID_SIZE;
+    const majorEvery = size * 4;
+    graphics.lineStyle(1, 0x2f4b3e, 0.32);
+    for (let x = 0; x <= width; x += size) {
+      if (x % majorEvery === 0) continue;
+      graphics.strokeLineShape(new Phaser.Geom.Line(x, 0, x, height));
+    }
+    for (let y = 0; y <= height; y += size) {
+      if (y % majorEvery === 0) continue;
+      graphics.strokeLineShape(new Phaser.Geom.Line(0, y, width, y));
+    }
+
+    graphics.lineStyle(1, 0x6d8e78, 0.56);
+    for (let x = 0; x <= width; x += majorEvery) {
+      graphics.strokeLineShape(new Phaser.Geom.Line(x, 0, x, height));
+    }
+    for (let y = 0; y <= height; y += majorEvery) {
+      graphics.strokeLineShape(new Phaser.Geom.Line(0, y, width, y));
+    }
   }
 
   drawDeadCanvasDots(graphics, x, y, width, height, playableWidth, playableHeight) {
@@ -1263,6 +1323,41 @@ export class LevelEditorScene extends Phaser.Scene {
     this.zoomIndicatorEl.textContent = `ZOOM ${Math.round(this.cameras.main.zoom * 100)}%`;
   }
 
+  updateGridControls() {
+    if (this.snapToggleEl) {
+      this.snapToggleEl.textContent = this.snapEnabled ? "SNAP ON" : "SNAP OFF";
+      this.snapToggleEl.className = [
+        "h-8 min-w-24 border-r border-[#385346] px-3 transition hover:bg-[#102019] hover:text-[#fff3a6]",
+        this.snapEnabled ? "bg-[#17231d] text-[#f4e786]" : "bg-[#1f1110] text-[#f07b6e]"
+      ].join(" ");
+    }
+    if (this.snapModifierEl) {
+      const free = this.snapEnabled && this.keys?.alt?.isDown;
+      this.snapModifierEl.textContent = free ? "ALT: FREE" : "ALT: SNAP";
+      this.snapModifierEl.className = free
+        ? "min-w-20 px-3 text-center text-[#8ee0c6]"
+        : "min-w-20 px-3 text-center text-[#8fa89d]";
+    }
+    this.hudRoot?.querySelectorAll("[data-grid-size]").forEach((button) => {
+      const active = Number(button.dataset.gridSize) === this.gridSize;
+      button.className = [
+        "h-8 min-w-10 border-r border-[#385346] px-2 transition hover:bg-[#102019] hover:text-[#fff3a6]",
+        active ? "bg-[#e7d66b] text-[#07100f]" : "text-[#edf8ed]"
+      ].join(" ");
+    });
+  }
+
+  updateCursorCoordinates() {
+    if (!this.cursorCoordsEl) return;
+    if (!this.cursorWorldPoint) {
+      this.cursorCoordsEl.textContent = "X: ---- Y: ----";
+      this.cursorCoordsEl.className = "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8fa89d] shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
+      return;
+    }
+    this.cursorCoordsEl.textContent = `X: ${Math.round(this.cursorWorldPoint.x)} Y: ${Math.round(this.cursorWorldPoint.y)}`;
+    this.cursorCoordsEl.className = "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#6ad8b4] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8ee0c6] shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
+  }
+
   updateToolButtons() {
     this.toolListEl?.querySelectorAll("[data-tool]").forEach((button) => {
       const disabled =
@@ -1325,10 +1420,18 @@ export class LevelEditorScene extends Phaser.Scene {
     ].join(" ");
   }
 
-  snapPoint(x, y) {
+  isSnapActive(pointer = null) {
+    return this.snapEnabled && !pointer?.event?.altKey && !this.keys?.alt?.isDown;
+  }
+
+  snapPoint(x, y, pointer = null) {
+    if (!this.isSnapActive(pointer)) {
+      return { x, y };
+    }
+    const size = this.gridSize || DEFAULT_GRID_SIZE;
     return {
-      x: Math.round(x / 10) * 10,
-      y: Math.round(y / 10) * 10
+      x: Math.round(x / size) * size,
+      y: Math.round(y / size) * size
     };
   }
 
