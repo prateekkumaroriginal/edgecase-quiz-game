@@ -1,4 +1,4 @@
-import { Group, Ungroup, Trash2 } from "lucide";
+import { Group, Redo2, Trash2, Undo2, Ungroup } from "lucide";
 import { LEVELS } from "../data/levels.js";
 
 const TOOL_DEFS = [
@@ -61,6 +61,7 @@ const DEFAULT_GRID_SIZE = 16;
 const MIN_RESIZE_SIZE = 8;
 const NUDGE_INITIAL_REPEAT_DELAY_MS = 250;
 const NUDGE_REPEAT_MS = 55;
+const HISTORY_LIMIT = 100;
 
 const FIELD_CONFIG = {
   platform: [
@@ -103,8 +104,15 @@ export class LevelEditorScene extends Phaser.Scene {
     this.snapEnabled = true;
     this.cursorWorldPoint = null;
     this.savedSnapshot = null;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.domEditHistoryActive = false;
+    this.nudgeHistoryActive = false;
+    this.restoringHistory = false;
+    this.canvasFocused = false;
     this.nextChallenge = 1;
     this.draft = this.makeDraftLevel();
+    this.updateNextChallengeCounter();
     this.objects = [];
 
     this.createWorldChrome();
@@ -134,9 +142,11 @@ export class LevelEditorScene extends Phaser.Scene {
   createInputs() {
     this.handleCanvasContextMenu = (event) => event.preventDefault();
     this.game.canvas.addEventListener("contextmenu", this.handleCanvasContextMenu);
+    this.game.canvas.tabIndex = 0;
     this.input.on("pointerdown", (pointer) => this.onPointerDown(pointer));
     this.input.on("pointermove", (pointer) => this.onPointerMove(pointer));
     this.input.on("pointerup", () => this.onPointerUp());
+    window.addEventListener("keydown", this.handleHistoryKeyDown, true);
     window.addEventListener("pointerup", this.handleWindowPointerUp);
     window.addEventListener("blur", this.handleWindowPointerCancel);
     this.input.on("wheel", (pointer, _objects, dx, dy, event) => this.onWheel(pointer, dx, dy, event));
@@ -154,6 +164,8 @@ export class LevelEditorScene extends Phaser.Scene {
       up: Phaser.Input.Keyboard.KeyCodes.UP,
       down: Phaser.Input.Keyboard.KeyCodes.DOWN,
       zero: Phaser.Input.Keyboard.KeyCodes.ZERO,
+      z: Phaser.Input.Keyboard.KeyCodes.Z,
+      y: Phaser.Input.Keyboard.KeyCodes.Y,
       i: Phaser.Input.Keyboard.KeyCodes.I,
       esc: Phaser.Input.Keyboard.KeyCodes.ESC
     });
@@ -185,6 +197,10 @@ export class LevelEditorScene extends Phaser.Scene {
       <aside data-left-panel class="pointer-events-auto absolute left-0 top-0 flex h-full w-[246px] flex-col border-r border-[#385346] bg-[#06100e]/95 p-4 shadow-[18px_0_36px_rgba(0,0,0,0.35)]">
         <div class="font-[EdgecaseTitle] text-3xl text-[#e7d66b]">LEVEL MAKER</div>
         <div class="mt-2 text-xs text-[#8fa89d]">Ctrl+I hides panels</div>
+        <div class="mt-4 grid grid-cols-2 gap-2">
+          <button data-action="undo" type="button" title="Undo (Ctrl+Z)" class="flex items-center justify-center gap-2 rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm font-bold text-[#edf8ed] transition-colors hover:border-[#6d8e78] hover:bg-[#21372e] hover:text-[#f4e786] disabled:cursor-not-allowed disabled:border-[#263d35] disabled:bg-[#0a1411] disabled:text-[#526a60]">${this.lucideSvg(Undo2, 16)}UNDO</button>
+          <button data-action="redo" type="button" title="Redo (Ctrl+Y)" class="flex items-center justify-center gap-2 rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm font-bold text-[#edf8ed] transition-colors hover:border-[#6d8e78] hover:bg-[#21372e] hover:text-[#f4e786] disabled:cursor-not-allowed disabled:border-[#263d35] disabled:bg-[#0a1411] disabled:text-[#526a60]">${this.lucideSvg(Redo2, 16)}REDO</button>
+        </div>
         <label class="mt-5 flex flex-col gap-1 text-xs font-bold text-[#8fa89d]">
           LEVEL NAME
           <input data-level-name type="text" value="${this.escapeHtml(this.draft.name)}" class="rounded-sm border border-[#385346] bg-[#102019] px-2 py-2 text-sm text-[#edf8ed] outline-none transition focus:border-[#f4e786]" />
@@ -218,6 +234,14 @@ export class LevelEditorScene extends Phaser.Scene {
       </aside>
     `;
     host.appendChild(this.hudRoot);
+    this.hudRoot.addEventListener("pointerdown", () => {
+      this.canvasFocused = false;
+      this.updateHistoryControls();
+    });
+    this.hudRoot.addEventListener("focusin", () => {
+      this.canvasFocused = false;
+      this.updateHistoryControls();
+    });
     ["keydown", "keyup", "keypress"].forEach((eventName) => {
       this.hudRoot.addEventListener(eventName, (event) => {
         if (this.isEditableDomTarget(event.target)) {
@@ -237,10 +261,18 @@ export class LevelEditorScene extends Phaser.Scene {
     this.worldWidthInputEl = this.hudRoot.querySelector("[data-world-width]");
     this.worldHeightInputEl = this.hudRoot.querySelector("[data-world-height]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
+    this.undoButtonEl = this.hudRoot.querySelector("[data-action='undo']");
+    this.redoButtonEl = this.hudRoot.querySelector("[data-action='redo']");
+    this.undoButtonEl.addEventListener("click", () => this.undo({ requireCanvasFocus: false }));
+    this.redoButtonEl.addEventListener("click", () => this.redo({ requireCanvasFocus: false }));
     this.nameInputEl.addEventListener("input", () => {
       this.draft.name = this.nameInputEl.value;
       this.markDirty();
     });
+    this.worldWidthInputEl.addEventListener("focus", () => this.beginDomEditHistory());
+    this.worldHeightInputEl.addEventListener("focus", () => this.beginDomEditHistory());
+    this.worldWidthInputEl.addEventListener("blur", () => this.endDomEditHistory());
+    this.worldHeightInputEl.addEventListener("blur", () => this.endDomEditHistory());
     this.worldWidthInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
     this.worldHeightInputEl.addEventListener("input", () => this.updateCanvasSizeFromInputs());
     this.hudRoot.querySelector("[data-zoom-out]").addEventListener("click", () => this.adjustCanvasZoom(-ZOOM_STEP));
@@ -284,6 +316,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.renderInspector();
     this.savedSnapshot = this.serializeDraft();
     this.updateSaveStatus();
+    this.updateHistoryControls();
     this.updateZoomIndicator();
     this.updateGridControls();
     this.updateCursorCoordinates();
@@ -378,6 +411,7 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   updateCanvasSizeFromInputs() {
+    this.beginDomEditHistory();
     const previousWidth = this.worldWidth();
     const previousHeight = this.worldHeight();
     this.draft.worldWidth = Math.max(MIN_WORLD_WIDTH, Number(this.worldWidthInputEl.value) || MIN_WORLD_WIDTH);
@@ -467,6 +501,24 @@ export class LevelEditorScene extends Phaser.Scene {
     this.cancelPointerInteraction();
   };
 
+  handleHistoryKeyDown = (event) => {
+    if (!this.canUseHistoryShortcut() || this.isEditableDomTarget(event.target)) return;
+
+    const key = event.key.toLowerCase();
+    const isModifierDown = event.ctrlKey || event.metaKey;
+    const redo = isModifierDown && (key === "y" || (key === "z" && event.shiftKey));
+    const undo = isModifierDown && key === "z" && !event.shiftKey;
+    if (!undo && !redo) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (redo) {
+      this.redo({ requireCanvasFocus: false });
+    } else {
+      this.undo({ requireCanvasFocus: false });
+    }
+  };
+
   adjustCanvasZoom(delta) {
     this.setCanvasZoom(Phaser.Math.Clamp(
       this.cameras.main.zoom + delta,
@@ -484,6 +536,12 @@ export class LevelEditorScene extends Phaser.Scene {
 
   onPointerDown(pointer) {
     this.blurActiveDomField();
+
+    this.canvasFocused = this.pointerInsideWorldViewport(pointer);
+    this.updateHistoryControls();
+    if (this.canvasFocused) {
+      this.game.canvas.focus({ preventScroll: true });
+    }
 
     if (pointer.rightButtonDown() || pointer.button === 2) {
       pointer.event?.preventDefault?.();
@@ -524,7 +582,8 @@ export class LevelEditorScene extends Phaser.Scene {
       this.dragging = {
         objects: targets.map((obj) => ({ obj, startX: obj.data.x, startY: obj.data.y })),
         startX: world.x,
-        startY: world.y
+        startY: world.y,
+        historyRecorded: false
       };
       return;
     }
@@ -535,6 +594,7 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     const created = this.createDataForTool(world.x, world.y);
+    this.recordHistory();
     this.clampDataToEditableArea(created.type, created);
     const added = this.addData(created);
     this.expandWorldToIncludeObjects([{ type: created.type, data: created }]);
@@ -594,6 +654,11 @@ export class LevelEditorScene extends Phaser.Scene {
     const dx = world.x - this.dragging.startX;
     const dy = world.y - this.dragging.startY;
     const clampedDelta = this.clampedEditableSelectionDelta(this.dragging.objects, dx, dy);
+    if (clampedDelta.dx === 0 && clampedDelta.dy === 0) return;
+    if (!this.dragging.historyRecorded) {
+      this.recordHistory();
+      this.dragging.historyRecorded = true;
+    }
     for (const item of this.dragging.objects) {
       item.obj.data.x = item.startX + clampedDelta.dx;
       item.obj.data.y = item.startY + clampedDelta.dy;
@@ -622,6 +687,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.resizeWorldViewport();
       this.refreshInspectorValues();
       this.markDirty();
+      this.discardUnchangedHistoryEntry();
       return;
     }
     if (draggedObjects.length > 0) {
@@ -635,6 +701,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.resizeWorldViewport();
       this.refreshInspectorValues();
       this.markDirty();
+      this.discardUnchangedHistoryEntry();
     }
   }
 
@@ -1091,6 +1158,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.nudgeRepeat.signature = "";
       this.nudgeRepeat.startedAt = 0;
       this.nudgeRepeat.lastAt = 0;
+      this.nudgeHistoryActive = false;
       return false;
     }
 
@@ -1102,6 +1170,10 @@ export class LevelEditorScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.keys.down) ||
       signature !== this.nudgeRepeat.signature;
     if (justPressed) {
+      if (!this.nudgeHistoryActive) {
+        this.recordHistory();
+        this.nudgeHistoryActive = true;
+      }
       this.moveSelectionBy(dx * (this.keys.shift.isDown ? (this.gridSize || DEFAULT_GRID_SIZE) : 1), dy * (this.keys.shift.isDown ? (this.gridSize || DEFAULT_GRID_SIZE) : 1));
       this.nudgeRepeat.signature = signature;
       this.nudgeRepeat.startedAt = time;
@@ -1171,7 +1243,8 @@ export class LevelEditorScene extends Phaser.Scene {
       handle: handle.id,
       startX: startPoint.x,
       startY: startPoint.y,
-      startBounds: bounds
+      startBounds: bounds,
+      historyRecorded: false
     };
     this.input.setDefaultCursor(handle.cursor);
   }
@@ -1200,11 +1273,25 @@ export class LevelEditorScene extends Phaser.Scene {
       else bottom = top + MIN_RESIZE_SIZE;
     }
 
-    obj.data.width = right - left;
-    obj.data.height = bottom - top;
-    obj.data.x = left;
-    obj.data.y = top;
-    this.clampDataToEditableArea(obj.type, obj.data);
+    const nextData = {
+      ...obj.data,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top
+    };
+    this.clampDataToEditableArea(obj.type, nextData);
+    const changed =
+      nextData.x !== startBounds.left ||
+      nextData.y !== startBounds.top ||
+      nextData.width !== startBounds.right - startBounds.left ||
+      nextData.height !== startBounds.bottom - startBounds.top;
+    if (!changed) return;
+    if (!this.resizing.historyRecorded) {
+      this.recordHistory();
+      this.resizing.historyRecorded = true;
+    }
+    Object.assign(obj.data, nextData);
     this.syncVisual(obj);
     this.updateSelectionOverlay();
     this.refreshInspectorValues();
@@ -1348,6 +1435,8 @@ export class LevelEditorScene extends Phaser.Scene {
     `;
 
     this.inspectorEl.querySelectorAll("[data-field]").forEach((input) => {
+      input.addEventListener("focus", () => this.beginDomEditHistory());
+      input.addEventListener("blur", () => this.endDomEditHistory());
       input.addEventListener("input", () => this.updateSelectedField(input.dataset.field, input.value, input.dataset.kind));
     });
     this.inspectorEl.querySelector("[data-action='duplicate']")?.addEventListener("click", () => this.duplicateSelected());
@@ -1376,6 +1465,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   updateSelectedField(key, value, type) {
     if (!this.selected) return;
+    this.beginDomEditHistory();
     this.selected.data[key] = type === "number" ? Number(value) || 0 : value;
     this.clampDataToEditableArea(this.selected.type, this.selected.data);
     this.syncVisual(this.selected);
@@ -1399,6 +1489,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   duplicateSelected() {
     if (!this.canDuplicateSelected()) return;
+    this.recordHistory();
     const sourceGroupId = this.selection[0]?.data.groupId;
     const shouldDuplicateAsGroup = this.selection.length > 1 && sourceGroupId && this.selection.every((obj) => obj.data.groupId === sourceGroupId);
     const nextGroupId = shouldDuplicateAsGroup ? `group-${Date.now().toString(36)}` : null;
@@ -1419,6 +1510,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   deleteSelected() {
     if (!this.selected) return;
+    this.recordHistory();
     for (const { type, data } of this.selection) {
       if (type === "merchant") this.draft.merchant = null;
       else if (type === "exitGate") this.draft.exitGate = null;
@@ -1435,6 +1527,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   groupSelected() {
     if (this.selection.length < 2) return;
+    this.recordHistory();
     const groupId = `group-${Date.now().toString(36)}`;
     this.selection.forEach((obj) => {
       obj.data.groupId = groupId;
@@ -1445,6 +1538,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   ungroupSelected() {
     if (this.selection.length < 1) return;
+    this.recordHistory();
     this.selection.forEach((obj) => {
       delete obj.data.groupId;
     });
@@ -1606,12 +1700,124 @@ export class LevelEditorScene extends Phaser.Scene {
     this.updateSaveStatus();
   }
 
+  recordHistory() {
+    if (this.restoringHistory) return;
+    const snapshot = this.serializeHistoryDraft();
+    if (this.undoStack[this.undoStack.length - 1] === snapshot) return;
+    this.undoStack.push(snapshot);
+    if (this.undoStack.length > HISTORY_LIMIT) {
+      this.undoStack.shift();
+    }
+    this.redoStack = [];
+    this.updateHistoryControls();
+  }
+
+  discardUnchangedHistoryEntry() {
+    if (this.undoStack[this.undoStack.length - 1] === this.serializeHistoryDraft()) {
+      this.undoStack.pop();
+      this.updateHistoryControls();
+    }
+  }
+
+  beginDomEditHistory() {
+    if (this.domEditHistoryActive) return;
+    this.recordHistory();
+    this.domEditHistoryActive = true;
+  }
+
+  endDomEditHistory() {
+    this.discardUnchangedHistoryEntry();
+    this.domEditHistoryActive = false;
+  }
+
+  undo({ requireCanvasFocus = true } = {}) {
+    if (requireCanvasFocus && !this.canUseHistoryShortcut()) return;
+    if (this.undoStack.length === 0) {
+      this.showMessage("Nothing to undo");
+      return;
+    }
+    this.endDomEditHistory();
+    this.cancelPointerInteraction();
+    this.cancelPlacement();
+    this.redoStack.push(this.serializeHistoryDraft());
+    const snapshot = this.undoStack.pop();
+    this.restoreHistorySnapshot(snapshot);
+    this.showMessage("Undid change");
+    this.updateHistoryControls();
+  }
+
+  redo({ requireCanvasFocus = true } = {}) {
+    if (requireCanvasFocus && !this.canUseHistoryShortcut()) return;
+    if (this.redoStack.length === 0) {
+      this.showMessage("Nothing to redo");
+      return;
+    }
+    this.endDomEditHistory();
+    this.cancelPointerInteraction();
+    this.cancelPlacement();
+    this.undoStack.push(this.serializeHistoryDraft());
+    if (this.undoStack.length > HISTORY_LIMIT) {
+      this.undoStack.shift();
+    }
+    const snapshot = this.redoStack.pop();
+    this.restoreHistorySnapshot(snapshot);
+    this.showMessage("Redid change");
+    this.updateHistoryControls();
+  }
+
+  restoreHistorySnapshot(snapshot) {
+    const currentName = this.draft.name;
+    this.restoringHistory = true;
+    try {
+      this.draft = this.normalizeDraftDimensions(this.stripFixedGround(JSON.parse(snapshot)));
+      this.draft.name = currentName;
+      this.updateNextChallengeCounter();
+      this.rebuildObjects();
+      this.redrawWorldChrome();
+      this.resizeWorldViewport();
+      this.updateCanvasSizeInputs();
+      if (this.nameInputEl) {
+        this.nameInputEl.value = this.draft.name;
+      }
+      this.renderInspector();
+      this.updateToolButtons();
+      this.updatePlacementPreview(this.input.activePointer);
+      this.updateSaveStatus();
+      this.updateHistoryControls();
+    } finally {
+      this.restoringHistory = false;
+    }
+  }
+
+  updateHistoryControls() {
+    if (this.undoButtonEl) {
+      this.undoButtonEl.disabled = this.undoStack.length === 0;
+    }
+    if (this.redoButtonEl) {
+      this.redoButtonEl.disabled = this.redoStack.length === 0;
+    }
+  }
+
+  updateNextChallengeCounter() {
+    this.nextChallenge = (this.draft.challenges || []).length + 1;
+  }
+
+  canUseHistoryShortcut() {
+    return this.canvasFocused && !this.hudRoot?.contains(document.activeElement);
+  }
+
   isSaved() {
     return this.savedSnapshot !== null && this.savedSnapshot === this.serializeDraft();
   }
 
   serializeDraft() {
     return JSON.stringify(this.draft);
+  }
+
+  serializeHistoryDraft() {
+    const snapshot = structuredClone(this.draft);
+    snapshot.name = "";
+    return JSON.stringify(snapshot);
   }
 
   updateSaveStatus() {
@@ -1756,6 +1962,7 @@ export class LevelEditorScene extends Phaser.Scene {
   destroyDomHud() {
     window.clearTimeout(this.messageTimer);
     this.game?.canvas?.removeEventListener("contextmenu", this.handleCanvasContextMenu);
+    window.removeEventListener("keydown", this.handleHistoryKeyDown, true);
     window.removeEventListener("pointerup", this.handleWindowPointerUp);
     window.removeEventListener("blur", this.handleWindowPointerCancel);
     this.scale?.off(Phaser.Scale.Events.RESIZE, this.resizeWorldViewport, this);
