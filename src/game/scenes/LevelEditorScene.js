@@ -77,6 +77,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.cameraDrag = null;
     this.areaSelection = null;
     this.hoveredObject = null;
+    this.placementPreview = null;
     this.hudVisible = true;
     this.gridSize = DEFAULT_GRID_SIZE;
     this.snapEnabled = true;
@@ -111,6 +112,8 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   createInputs() {
+    this.handleCanvasContextMenu = (event) => event.preventDefault();
+    this.game.canvas.addEventListener("contextmenu", this.handleCanvasContextMenu);
     this.input.on("pointerdown", (pointer) => this.onPointerDown(pointer));
     this.input.on("pointermove", (pointer) => this.onPointerMove(pointer));
     this.input.on("pointerup", () => this.onPointerUp());
@@ -218,12 +221,14 @@ export class LevelEditorScene extends Phaser.Scene {
     this.snapToggleEl.addEventListener("click", () => {
       this.snapEnabled = !this.snapEnabled;
       this.updateGridControls();
+      this.updatePlacementPreview(this.input.activePointer);
     });
     this.hudRoot.querySelectorAll("[data-grid-size]").forEach((button) => {
       button.addEventListener("click", () => {
         this.gridSize = Number(button.dataset.gridSize) || DEFAULT_GRID_SIZE;
         this.redrawWorldChrome();
         this.updateGridControls();
+        this.updatePlacementPreview(this.input.activePointer);
       });
     });
 
@@ -237,6 +242,7 @@ export class LevelEditorScene extends Phaser.Scene {
         this.activeTool = tool.id;
         this.clearSelection();
         this.updateToolButtons();
+        this.updatePlacementPreview(this.input.activePointer);
         this.showMessage(`${tool.label} ready`);
       });
       this.toolListEl.appendChild(button);
@@ -279,9 +285,11 @@ export class LevelEditorScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.i) && this.keys.ctrl.isDown) {
       this.toggleHud();
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
-      this.activeTool = null;
+      if (this.activeTool) {
+        this.cancelPlacement();
+        return;
+      }
       this.clearSelection();
-      this.updateToolButtons();
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.del)) {
       this.deleteSelected();
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.d)) {
@@ -452,6 +460,17 @@ export class LevelEditorScene extends Phaser.Scene {
 
   onPointerDown(pointer) {
     this.blurActiveDomField();
+
+    if (pointer.rightButtonDown() || pointer.button === 2) {
+      pointer.event?.preventDefault?.();
+      if (this.activeTool) {
+        this.cancelPlacement();
+      } else {
+        this.cancelPointerInteraction();
+      }
+      return;
+    }
+
     if (this.areaSelection || this.dragging || this.cameraDrag) {
       this.cancelPointerInteraction();
     }
@@ -495,6 +514,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.resizeWorldViewport();
     this.selectObject(this.objects.find((obj) => obj.data === added) || this.objects[this.objects.length - 1]);
     this.activeTool = null;
+    this.destroyPlacementPreview();
     this.updateToolButtons();
     this.markDirty();
   }
@@ -505,6 +525,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.cursorWorldPoint = null;
       this.updateCursorCoordinates();
       this.setHoveredObject(null);
+      this.updatePlacementPreview(null);
       if (!pointer.isDown && (this.areaSelection || this.dragging || this.cameraDrag)) {
         this.cancelPointerInteraction();
       }
@@ -514,21 +535,25 @@ export class LevelEditorScene extends Phaser.Scene {
     this.updateCursorCoordinates();
 
     if (this.cameraDrag) {
+      this.updatePlacementPreview(null);
       this.updateCameraDrag(pointer);
       return;
     }
 
     const world = this.snapPoint(worldPoint.x, worldPoint.y, pointer);
     if (this.areaSelection) {
+      this.updatePlacementPreview(null);
       this.updateAreaSelection(world.x, world.y);
       return;
     }
 
     if (!this.dragging) {
       this.setHoveredObject(this.findObjectAt(world.x, world.y));
+      this.updatePlacementPreview(pointer);
       return;
     }
 
+    this.updatePlacementPreview(null);
     const dx = world.x - this.dragging.startX;
     const dy = world.y - this.dragging.startY;
     const clampedDelta = this.clampedEditableSelectionDelta(this.dragging.objects, dx, dy);
@@ -571,6 +596,13 @@ export class LevelEditorScene extends Phaser.Scene {
     this.input.setDefaultCursor("default");
   }
 
+  cancelPlacement() {
+    this.activeTool = null;
+    this.destroyPlacementPreview();
+    this.updateToolButtons();
+    this.showMessage("Placement cancelled");
+  }
+
   startCameraDrag(pointer) {
     this.cameraDrag = {
       startPointerX: pointer.x,
@@ -591,19 +623,22 @@ export class LevelEditorScene extends Phaser.Scene {
     this.clampCameraScroll();
   }
 
-  createDataForTool(x, y) {
-    if (this.activeTool === "platform") return { type: "platform", x, y, width: 220, height: 34 };
-    if (this.activeTool === "coin") return { type: "coin", x, y };
-    if (this.activeTool === "hazard") return { type: "hazard", x, y };
-    if (this.activeTool === "enemy") return { type: "enemy", x, y, min: x - 120, max: x + 120 };
-    if (this.activeTool === "challenge") {
+  createDataForTool(x, y, options = {}) {
+    const tool = options.tool || this.activeTool;
+    if (tool === "platform") return { type: "platform", x, y, width: 220, height: 34 };
+    if (tool === "coin") return { type: "coin", x, y };
+    if (tool === "hazard") return { type: "hazard", x, y };
+    if (tool === "enemy") return { type: "enemy", x, y, min: x - 120, max: x + 120 };
+    if (tool === "challenge") {
       const index = this.nextChallenge;
-      this.nextChallenge += 1;
+      if (options.commit !== false) {
+        this.nextChallenge += 1;
+      }
       return { type: "challenge", x, y, width: 170, height: 110, label: `CHALLENGE ${String(index).padStart(2, "0")}`, difficulty: "easy" };
     }
-    if (this.activeTool === "merchant") return { type: "merchant", x, y, width: 240, height: 120, npcX: x, npcY: y - 11 };
-    if (this.activeTool === "exitGate") return { type: "exitGate", x, y, width: 115, height: 138 };
-    if (this.activeTool === "playerSpawn") return { type: "playerSpawn", x, y };
+    if (tool === "merchant") return { type: "merchant", x, y, width: 240, height: 120, npcX: x, npcY: y - 11 };
+    if (tool === "exitGate") return { type: "exitGate", x, y, width: 115, height: 138 };
+    if (tool === "playerSpawn") return { type: "playerSpawn", x, y };
     return { type: "sign", x, y, text: "SIGN" };
   }
 
@@ -682,6 +717,67 @@ export class LevelEditorScene extends Phaser.Scene {
       obj.patrol.destroy();
       obj.patrol = this.add.line(0, 0, obj.data.min, obj.data.y + 36, obj.data.max, obj.data.y + 36, 0xe7d66b, 0.8).setOrigin(0).setDepth(8);
     }
+  }
+
+  updatePlacementPreview(pointer) {
+    if (!this.activeTool || !pointer) {
+      this.destroyPlacementPreview();
+      return;
+    }
+
+    const worldPoint = this.worldPointFromPointer(pointer);
+    if (!worldPoint) {
+      this.destroyPlacementPreview();
+      return;
+    }
+
+    const world = this.snapPoint(worldPoint.x, worldPoint.y, pointer);
+    const data = this.createDataForTool(world.x, world.y, { commit: false });
+    this.clampDataToEditableArea(data.type, data);
+
+    if (!this.placementPreview || this.placementPreview.type !== data.type) {
+      this.destroyPlacementPreview();
+      this.placementPreview = {
+        type: data.type,
+        visual: this.createPlacementPreviewVisual(data.type, data)
+      };
+    }
+
+    this.syncPlacementPreview(data.type, data);
+  }
+
+  createPlacementPreviewVisual(type, data) {
+    const colors = COLORS[type];
+    let visual;
+    if (type === "coin") {
+      visual = this.add.circle(data.x, data.y, 12, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+    } else if (type === "hazard") {
+      visual = this.add.triangle(data.x, data.y, 0, 30, 18, 0, 36, 30, colors.fill, 0.38).setStrokeStyle(2, colors.stroke, 0.9);
+    } else if (type === "enemy") {
+      visual = this.add.rectangle(data.x, data.y, 40, 38, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+    } else if (type === "playerSpawn") {
+      visual = this.add.rectangle(data.x, data.y, 34, 48, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+    } else {
+      visual = this.add.rectangle(data.x, data.y, data.width || 90, data.height || 34, colors.fill, 0.32).setStrokeStyle(3, colors.stroke, 0.9);
+    }
+
+    return visual.setDepth(90);
+  }
+
+  syncPlacementPreview(type, data) {
+    const preview = this.placementPreview?.visual;
+    if (!preview) return;
+    const size = this.objectSize(type, data);
+    preview.setPosition(data.x, data.y);
+    if (preview.setSize) {
+      preview.setSize(size.width, size.height);
+      preview.setDisplaySize(size.width, size.height);
+    }
+  }
+
+  destroyPlacementPreview() {
+    this.placementPreview?.visual.destroy();
+    this.placementPreview = null;
   }
 
   redrawWorldChrome() {
@@ -1365,6 +1461,9 @@ export class LevelEditorScene extends Phaser.Scene {
       button.disabled = disabled;
       button.className = this.toolClass(button.dataset.tool === this.activeTool, disabled);
     });
+    if (!this.activeTool) {
+      this.destroyPlacementPreview();
+    }
   }
 
   showMessage(message) {
@@ -1378,6 +1477,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
   destroyDomHud() {
     window.clearTimeout(this.messageTimer);
+    this.game?.canvas?.removeEventListener("contextmenu", this.handleCanvasContextMenu);
     window.removeEventListener("pointerup", this.handleWindowPointerUp);
     window.removeEventListener("blur", this.handleWindowPointerCancel);
     this.scale?.off(Phaser.Scale.Events.RESIZE, this.resizeWorldViewport, this);
