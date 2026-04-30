@@ -25,6 +25,20 @@ const COLORS = {
   sign: { fill: 0x08100f, stroke: 0xe7d66b }
 };
 
+const ITEM_SIZES = {
+  platform: { width: 220, height: 36 },
+  coin: { width: 24, height: 24 },
+  hazard: { width: 36, height: 32 },
+  enemy: { width: 40, height: 40 },
+  challenge: { width: 172, height: 112 },
+  merchant: { width: 240, height: 120 },
+  exitGate: { width: 116, height: 140 },
+  playerSpawn: { width: 36, height: 48 },
+  sign: { width: 92, height: 36 }
+};
+
+const STROKE_WIDTH = 3;
+
 const DEFAULT_WORLD_WIDTH = 4300;
 const DEFAULT_WORLD_HEIGHT = 720;
 const MIN_WORLD_WIDTH = 1280;
@@ -664,7 +678,8 @@ export class LevelEditorScene extends Phaser.Scene {
 
   createDataForTool(x, y, options = {}) {
     const tool = options.tool || this.activeTool;
-    if (tool === "platform") return { type: "platform", x, y, width: 220, height: 34 };
+    const size = this.objectSize(tool, {});
+    if (tool === "platform") return { type: "platform", x, y, width: size.width, height: size.height };
     if (tool === "coin") return { type: "coin", x, y };
     if (tool === "hazard") return { type: "hazard", x, y };
     if (tool === "enemy") return { type: "enemy", x, y, min: x - 120, max: x + 120 };
@@ -673,10 +688,10 @@ export class LevelEditorScene extends Phaser.Scene {
       if (options.commit !== false) {
         this.nextChallenge += 1;
       }
-      return { type: "challenge", x, y, width: 170, height: 110, label: `CHALLENGE ${String(index).padStart(2, "0")}`, difficulty: "easy" };
+      return { type: "challenge", x, y, width: size.width, height: size.height, label: `CHALLENGE ${String(index).padStart(2, "0")}`, difficulty: "easy" };
     }
-    if (tool === "merchant") return { type: "merchant", x, y, width: 240, height: 120, npcX: x, npcY: y - 11 };
-    if (tool === "exitGate") return { type: "exitGate", x, y, width: 115, height: 138 };
+    if (tool === "merchant") return { type: "merchant", x, y, width: size.width, height: size.height, npcX: x, npcY: y };
+    if (tool === "exitGate") return { type: "exitGate", x, y, width: size.width, height: size.height };
     if (tool === "playerSpawn") return { type: "playerSpawn", x, y };
     return { type: "sign", x, y, text: "SIGN" };
   }
@@ -720,25 +735,28 @@ export class LevelEditorScene extends Phaser.Scene {
   addObjects(type, list) {
     for (const data of list) {
       const colors = COLORS[type];
+      const size = this.objectSize(type, data);
+      const center = this.objectCenter(type, data);
       let visual;
       if (type === "coin") {
-        visual = this.add.circle(data.x, data.y, 12, colors.fill).setStrokeStyle(3, colors.stroke);
+        visual = this.add.circle(center.x, center.y, size.width / 2, colors.fill);
       } else if (type === "hazard") {
-        visual = this.add.triangle(data.x, data.y, 0, 30, 18, 0, 36, 30, colors.fill).setStrokeStyle(2, colors.stroke);
+        visual = this.add.triangle(center.x, center.y, 0, size.height, size.width / 2, 0, size.width, size.height, colors.fill);
       } else if (type === "enemy") {
-        visual = this.add.rectangle(data.x, data.y, 40, 38, colors.fill).setStrokeStyle(3, colors.stroke);
+        visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill);
       } else if (type === "playerSpawn") {
-        visual = this.add.rectangle(data.x, data.y, 34, 48, colors.fill).setStrokeStyle(3, colors.stroke);
+        visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill);
       } else {
-        visual = this.add.rectangle(data.x, data.y, data.width || 90, data.height || 34, colors.fill, type === "sign" ? 0.9 : 0.55).setStrokeStyle(3, colors.stroke);
+        visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill, type === "sign" ? 0.9 : 0.55);
       }
+      this.applyObjectStroke({ type, visual }, colors.stroke);
       visual.setDepth(10);
       const obj = { type, data, visual };
       if (type === "enemy") {
-        obj.patrol = this.add.line(0, 0, data.min, data.y + 36, data.max, data.y + 36, 0xe7d66b, 0.8).setOrigin(0).setDepth(8);
+        obj.patrol = this.createPatrolLine(data);
       }
       if (type === "challenge" || type === "sign") {
-        obj.label = this.add.text(data.x - 55, data.y - 58, data.label || data.text || type.toUpperCase(), this.smallStyle("#e7d66b")).setDepth(11);
+        obj.label = this.add.text(data.x, data.y - 20, data.label || data.text || type.toUpperCase(), this.smallStyle("#e7d66b")).setDepth(11);
       }
       this.objects.push(obj);
       this.syncVisual(obj);
@@ -746,18 +764,20 @@ export class LevelEditorScene extends Phaser.Scene {
   }
 
   syncVisual(obj) {
-    obj.visual.setPosition(obj.data.x, obj.data.y);
+    const size = this.objectSize(obj.type, obj.data);
+    const center = this.objectCenter(obj.type, obj.data);
+    obj.visual.setPosition(center.x, center.y);
     if (obj.visual.setSize && obj.data.width && obj.data.height) {
-      obj.visual.setSize(obj.data.width, obj.data.height);
-      obj.visual.setDisplaySize(obj.data.width, obj.data.height);
+      obj.visual.setSize(size.width, size.height);
+      obj.visual.setDisplaySize(size.width, size.height);
     }
     if (obj.label) {
-      obj.label.setPosition(obj.data.x - 55, obj.data.y - 58);
+      obj.label.setPosition(obj.data.x, obj.data.y - 20);
       obj.label.setText(obj.data.label || obj.data.text || obj.type.toUpperCase());
     }
     if (obj.patrol) {
       obj.patrol.destroy();
-      obj.patrol = this.add.line(0, 0, obj.data.min, obj.data.y + 36, obj.data.max, obj.data.y + 36, 0xe7d66b, 0.8).setOrigin(0).setDepth(8);
+      obj.patrol = this.createPatrolLine(obj.data);
     }
     if (this.selection.includes(obj)) {
       this.updateSelectionOverlay();
@@ -793,18 +813,21 @@ export class LevelEditorScene extends Phaser.Scene {
 
   createPlacementPreviewVisual(type, data) {
     const colors = COLORS[type];
+    const size = this.objectSize(type, data);
+    const center = this.objectCenter(type, data);
     let visual;
     if (type === "coin") {
-      visual = this.add.circle(data.x, data.y, 12, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+      visual = this.add.circle(center.x, center.y, size.width / 2, colors.fill, 0.38);
     } else if (type === "hazard") {
-      visual = this.add.triangle(data.x, data.y, 0, 30, 18, 0, 36, 30, colors.fill, 0.38).setStrokeStyle(2, colors.stroke, 0.9);
+      visual = this.add.triangle(center.x, center.y, 0, size.height, size.width / 2, 0, size.width, size.height, colors.fill, 0.38);
     } else if (type === "enemy") {
-      visual = this.add.rectangle(data.x, data.y, 40, 38, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+      visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill, 0.38);
     } else if (type === "playerSpawn") {
-      visual = this.add.rectangle(data.x, data.y, 34, 48, colors.fill, 0.38).setStrokeStyle(3, colors.stroke, 0.9);
+      visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill, 0.38);
     } else {
-      visual = this.add.rectangle(data.x, data.y, data.width || 90, data.height || 34, colors.fill, 0.32).setStrokeStyle(3, colors.stroke, 0.9);
+      visual = this.add.rectangle(center.x, center.y, size.width, size.height, colors.fill, 0.32);
     }
+    this.applyObjectStroke({ type, visual }, colors.stroke, 0.9);
 
     return visual.setDepth(90);
   }
@@ -813,7 +836,8 @@ export class LevelEditorScene extends Phaser.Scene {
     const preview = this.placementPreview?.visual;
     if (!preview) return;
     const size = this.objectSize(type, data);
-    preview.setPosition(data.x, data.y);
+    const center = this.objectCenter(type, data);
+    preview.setPosition(center.x, center.y);
     if (preview.setSize) {
       preview.setSize(size.width, size.height);
       preview.setDisplaySize(size.width, size.height);
@@ -907,10 +931,10 @@ export class LevelEditorScene extends Phaser.Scene {
   objectBounds(type, data) {
     const size = this.objectSize(type, data);
     return {
-      left: data.x - size.width / 2,
-      right: data.x + size.width / 2,
-      top: data.y - size.height / 2,
-      bottom: data.y + size.height / 2
+      left: data.x,
+      right: data.x + size.width,
+      top: data.y,
+      bottom: data.y + size.height
     };
   }
 
@@ -1042,10 +1066,10 @@ export class LevelEditorScene extends Phaser.Scene {
     let maxDy = Infinity;
     for (const { obj, startX, startY } of items) {
       const size = this.objectSize(obj.type, obj.data);
-      minDx = Math.max(minDx, size.width / 2 - startX);
-      maxDx = Math.min(maxDx, this.editableMaxX() - size.width / 2 - startX);
-      minDy = Math.max(minDy, this.editableMinY() + size.height / 2 - startY);
-      maxDy = Math.min(maxDy, this.groundTop() - size.height / 2 - startY);
+      minDx = Math.max(minDx, -startX);
+      maxDx = Math.min(maxDx, this.editableMaxX() - size.width - startX);
+      minDy = Math.max(minDy, this.editableMinY() - startY);
+      maxDy = Math.min(maxDy, this.groundTop() - size.height - startY);
     }
     return {
       dx: Phaser.Math.Clamp(dx, minDx, maxDx),
@@ -1178,8 +1202,8 @@ export class LevelEditorScene extends Phaser.Scene {
 
     obj.data.width = right - left;
     obj.data.height = bottom - top;
-    obj.data.x = left + obj.data.width / 2;
-    obj.data.y = top + obj.data.height / 2;
+    obj.data.x = left;
+    obj.data.y = top;
     this.clampDataToEditableArea(obj.type, obj.data);
     this.syncVisual(obj);
     this.updateSelectionOverlay();
@@ -1198,7 +1222,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.objects.forEach((item) => {
       const colors = COLORS[item.type];
       const selected = objects.includes(item);
-      item.visual.setStrokeStyle(selected ? 5 : 3, selected ? 0xf4e786 : colors.stroke);
+      this.applyObjectStroke(item, selected ? 0xf4e786 : colors.stroke);
       item.visual.setAlpha(1);
     });
     this.updateSelectionOverlay();
@@ -1349,7 +1373,7 @@ export class LevelEditorScene extends Phaser.Scene {
   updateSelectedField(key, value, type) {
     if (!this.selected) return;
     this.selected.data[key] = type === "number" ? Number(value) || 0 : value;
-    this.clampDataToWorld(this.selected.type, this.selected.data);
+    this.clampDataToEditableArea(this.selected.type, this.selected.data);
     this.syncVisual(this.selected);
     this.updateSelectionOverlay();
     this.markDirty();
@@ -1507,7 +1531,7 @@ export class LevelEditorScene extends Phaser.Scene {
     level.worldHeight = height;
     level.floorY = this.groundTop();
     level.platforms = [
-      { x: width / 2, y: this.groundY(), width, height: GROUND_HEIGHT },
+      { x: 0, y: this.groundTop(), width, height: GROUND_HEIGHT },
       ...(level.platforms || [])
     ];
     return level;
@@ -1559,13 +1583,14 @@ export class LevelEditorScene extends Phaser.Scene {
   stripFixedGround(level) {
     const width = level.worldWidth || DEFAULT_WORLD_WIDTH;
     const height = level.worldHeight || DEFAULT_WORLD_HEIGHT;
-    const groundY = height - GROUND_HEIGHT / 2 - GROUND_BOTTOM_MARGIN;
+    const groundTop = height - GROUND_HEIGHT - GROUND_BOTTOM_MARGIN;
+    const legacyGroundY = height - GROUND_HEIGHT / 2 - GROUND_BOTTOM_MARGIN;
     return {
       ...level,
       platforms: (level.platforms || []).filter((platform) => {
         return !(
-          platform.x === width / 2 &&
-          platform.y === groundY &&
+          ((platform.x === 0 && platform.y === groundTop) ||
+            (platform.x === width / 2 && platform.y === legacyGroundY)) &&
           platform.width === width &&
           platform.height === GROUND_HEIGHT
         );
@@ -1605,7 +1630,7 @@ export class LevelEditorScene extends Phaser.Scene {
   clearObjectFocus() {
     this.objects.forEach((item) => {
       const colors = COLORS[item.type];
-      item.visual.setStrokeStyle(3, colors.stroke);
+      this.applyObjectStroke(item, colors.stroke);
       item.visual.setAlpha(1);
     });
   }
@@ -1614,12 +1639,12 @@ export class LevelEditorScene extends Phaser.Scene {
     if (this.hoveredObject === obj) return;
     if (this.hoveredObject && !this.selection.includes(this.hoveredObject)) {
       const colors = COLORS[this.hoveredObject.type];
-      this.hoveredObject.visual.setStrokeStyle(3, colors.stroke);
+      this.applyObjectStroke(this.hoveredObject, colors.stroke);
       this.hoveredObject.visual.setAlpha(1);
     }
     this.hoveredObject = obj;
     if (obj && !this.selection.includes(obj)) {
-      obj.visual.setStrokeStyle(4, 0x8ee0c6);
+      this.applyObjectStroke(obj, 0x8ee0c6);
       obj.visual.setAlpha(0.86);
     }
   }
@@ -1642,20 +1667,23 @@ export class LevelEditorScene extends Phaser.Scene {
 
   clampCameraScroll() {
     const camera = this.cameras.main;
+    const bounds = camera.getBounds();
     const visibleWorldWidth = camera.width / camera.zoom;
     const visibleWorldHeight = camera.height / camera.zoom;
-    const maxScrollX = this.worldWidth() + DEAD_CANVAS_RIGHT - visibleWorldWidth;
-    const maxScrollY = this.worldHeight() + DEAD_CANVAS_BOTTOM - visibleWorldHeight;
+    const minScrollX = bounds.x + (visibleWorldWidth - camera.width) / 2;
+    const minScrollY = bounds.y + (visibleWorldHeight - camera.height) / 2;
+    const maxScrollX = Math.max(minScrollX, minScrollX + bounds.width - visibleWorldWidth);
+    const maxScrollY = Math.max(minScrollY, minScrollY + bounds.height - visibleWorldHeight);
 
     camera.scrollX = Phaser.Math.Clamp(
       camera.scrollX,
-      Math.min(0, maxScrollX),
-      Math.max(0, maxScrollX)
+      minScrollX,
+      maxScrollX
     );
     camera.scrollY = Phaser.Math.Clamp(
       camera.scrollY,
-      Math.min(-DEAD_CANVAS_TOP, maxScrollY),
-      Math.max(-DEAD_CANVAS_TOP, maxScrollY)
+      minScrollY,
+      maxScrollY
     );
   }
 
@@ -1804,44 +1832,62 @@ export class LevelEditorScene extends Phaser.Scene {
 
   clampDataToWorld(type, data) {
     const size = this.objectSize(type, data);
-    data.x = Phaser.Math.Clamp(data.x, size.width / 2, this.worldWidth() - size.width / 2);
-    data.y = Phaser.Math.Clamp(data.y, size.height / 2, this.groundTop() - size.height / 2);
+    data.x = Phaser.Math.Clamp(data.x, 0, this.worldWidth() - size.width);
+    data.y = Phaser.Math.Clamp(data.y, 0, this.groundTop() - size.height);
     if (type === "enemy") {
-      data.min = Phaser.Math.Clamp(data.min, 0, this.worldWidth());
-      data.max = Phaser.Math.Clamp(data.max, 0, this.worldWidth());
+      data.min = Phaser.Math.Clamp(data.min, 0, this.worldWidth() - size.width);
+      data.max = Phaser.Math.Clamp(data.max, 0, this.worldWidth() - size.width);
       if (data.min > data.max) {
         [data.min, data.max] = [data.max, data.min];
       }
     }
     if (type === "merchant") {
-      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, this.worldWidth() - 30);
-      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, 43, this.groundTop() - 43);
+      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 0, this.worldWidth() - ITEM_SIZES.playerSpawn.width);
+      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y, 0, this.groundTop() - ITEM_SIZES.playerSpawn.height);
     }
   }
 
   clampDataToEditableArea(type, data) {
     const size = this.objectSize(type, data);
-    data.x = Phaser.Math.Clamp(data.x, size.width / 2, this.editableMaxX() - size.width / 2);
-    data.y = Phaser.Math.Clamp(data.y, this.editableMinY() + size.height / 2, this.groundTop() - size.height / 2);
+    data.x = Phaser.Math.Clamp(data.x, 0, this.editableMaxX() - size.width);
+    data.y = Phaser.Math.Clamp(data.y, this.editableMinY(), this.groundTop() - size.height);
     if (type === "enemy") {
-      data.min = Phaser.Math.Clamp(data.min, 0, this.editableMaxX());
-      data.max = Phaser.Math.Clamp(data.max, 0, this.editableMaxX());
+      data.min = Phaser.Math.Clamp(data.min, 0, this.editableMaxX() - size.width);
+      data.max = Phaser.Math.Clamp(data.max, 0, this.editableMaxX() - size.width);
       if (data.min > data.max) {
         [data.min, data.max] = [data.max, data.min];
       }
     }
     if (type === "merchant") {
-      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 30, this.editableMaxX() - 30);
-      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y - 11, this.editableMinY() + 43, this.groundTop() - 43);
+      data.npcX = Phaser.Math.Clamp(data.npcX ?? data.x, 0, this.editableMaxX() - ITEM_SIZES.playerSpawn.width);
+      data.npcY = Phaser.Math.Clamp(data.npcY ?? data.y, this.editableMinY(), this.groundTop() - ITEM_SIZES.playerSpawn.height);
     }
   }
 
   objectSize(type, data) {
-    if (type === "coin") return { width: 24, height: 24 };
-    if (type === "hazard") return { width: 36, height: 30 };
-    if (type === "enemy") return { width: 40, height: 38 };
-    if (type === "playerSpawn") return { width: 34, height: 48 };
-    return { width: data.width || 90, height: data.height || 34 };
+    const defaults = ITEM_SIZES[type] || ITEM_SIZES.sign;
+    return {
+      width: data.width || defaults.width,
+      height: data.height || defaults.height
+    };
+  }
+
+  objectCenter(type, data) {
+    const size = this.objectSize(type, data);
+    return {
+      x: data.x + size.width / 2,
+      y: data.y + size.height / 2
+    };
+  }
+
+  applyObjectStroke(obj, color, alpha = 1) {
+    obj.visual.setStrokeStyle(STROKE_WIDTH, color, alpha);
+  }
+
+  createPatrolLine(data) {
+    const size = this.objectSize("enemy", data);
+    const y = data.y + size.height + 18;
+    return this.add.line(0, 0, data.min, y, data.max + size.width, y, 0xe7d66b, 0.8).setOrigin(0).setDepth(8);
   }
 
   smallStyle(color) {

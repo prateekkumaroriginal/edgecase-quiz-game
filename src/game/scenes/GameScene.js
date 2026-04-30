@@ -12,6 +12,17 @@ const DIFFICULTY = {
   hard: { reward: 44, enemySpeed: 125, hazardCount: 8, questionMix: ["medium", "hard", "hard"] }
 };
 
+const ITEM_SIZES = {
+  platform: { width: 220, height: 36 },
+  coin: { width: 24, height: 24 },
+  hazard: { width: 36, height: 32 },
+  enemy: { width: 40, height: 40 },
+  challenge: { width: 172, height: 112 },
+  merchant: { width: 240, height: 120 },
+  exitGate: { width: 116, height: 140 },
+  playerSpawn: { width: 36, height: 48 }
+};
+
 export class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
@@ -107,12 +118,12 @@ export class GameScene extends Phaser.Scene {
     const g = this.add.graphics();
 
     g.fillStyle(0xf0f4df, 1);
-    g.fillRoundedRect(0, 0, 34, 48, 8);
+    g.fillRoundedRect(0, 0, 36, 48, 8);
     g.fillStyle(0x18231d, 1);
-    g.fillRect(7, 10, 20, 8);
+    g.fillRect(8, 10, 20, 8);
     g.fillStyle(0xd7c96d, 1);
-    g.fillRect(21, 31, 9, 11);
-    g.generateTexture("player", 34, 48);
+    g.fillRect(22, 31, 9, 11);
+    g.generateTexture("player", ITEM_SIZES.playerSpawn.width, ITEM_SIZES.playerSpawn.height);
     g.clear();
 
     g.fillStyle(0xd8cd6c, 1);
@@ -123,24 +134,24 @@ export class GameScene extends Phaser.Scene {
     g.clear();
 
     g.fillStyle(0x17231d, 1);
-    g.fillRoundedRect(0, 0, 64, 34, 4);
+    g.fillRoundedRect(0, 0, 64, 36, 4);
     g.fillStyle(0x2f4b3e, 1);
     g.fillRect(0, 0, 64, 7);
     g.lineStyle(2, 0xb9a44c, 0.65);
-    g.strokeRect(1, 1, 62, 32);
-    g.generateTexture("platform", 64, 34);
+    g.strokeRect(1, 1, 62, 34);
+    g.generateTexture("platform", 64, 36);
     g.clear();
 
     g.fillStyle(0xd65f4f, 1);
-    g.fillTriangle(0, 30, 18, 0, 36, 30);
-    g.generateTexture("spike", 36, 30);
+    g.fillTriangle(0, 32, 18, 0, 36, 32);
+    g.generateTexture("spike", ITEM_SIZES.hazard.width, ITEM_SIZES.hazard.height);
     g.clear();
 
     g.fillStyle(0x2d7f6d, 1);
-    g.fillRoundedRect(0, 0, 40, 38, 6);
+    g.fillRoundedRect(0, 0, 40, 40, 6);
     g.fillStyle(0xe7d66b, 1);
-    g.fillRect(9, 11, 22, 7);
-    g.generateTexture("enemy", 40, 38);
+    g.fillRect(9, 12, 22, 7);
+    g.generateTexture("enemy", ITEM_SIZES.enemy.width, ITEM_SIZES.enemy.height);
     g.destroy();
   }
 
@@ -177,7 +188,8 @@ export class GameScene extends Phaser.Scene {
 
   createPlayer() {
     const spawn = this.level.playerSpawn || { x: 90, y: 560 };
-    this.player = this.physics.add.sprite(spawn.x, spawn.y, "player");
+    const center = this.centerFromTopLeft("playerSpawn", spawn);
+    this.player = this.physics.add.sprite(center.x, center.y, "player");
     this.player.setCollideWorldBounds(true);
     this.player.setDragX(1550);
     this.player.setMaxVelocity(420, 920);
@@ -194,7 +206,8 @@ export class GameScene extends Phaser.Scene {
     this.coinGroup = this.physics.add.group({ allowGravity: false, immovable: true });
 
     for (const item of this.level.coins || []) {
-      const coin = this.coinGroup.create(item.x, item.y, "coin");
+      const center = this.centerFromTopLeft("coin", item);
+      const coin = this.coinGroup.create(center.x, center.y, "coin");
       coin.body.setCircle(12);
       coin.setData("value", item.value || 3);
     }
@@ -207,7 +220,8 @@ export class GameScene extends Phaser.Scene {
     const spikes = (this.level.hazards || []).slice(0, this.tuning.hazardCount);
 
     for (const hazard of spikes) {
-      const spike = this.hazards.create(hazard.x, hazard.y, "spike");
+      const center = this.centerFromTopLeft("hazard", hazard);
+      const spike = this.hazards.create(center.x, center.y, "spike");
       spike.refreshBody();
     }
 
@@ -215,7 +229,8 @@ export class GameScene extends Phaser.Scene {
     const patrols = this.level.enemies || [];
 
     for (const patrol of patrols.slice(0, this.difficulty === "easy" ? 1 : 3)) {
-      const enemy = this.enemies.create(patrol.x, patrol.y, "enemy");
+      const center = this.centerFromTopLeft("enemy", patrol);
+      const enemy = this.enemies.create(center.x, center.y, "enemy");
       enemy.setData("min", patrol.min);
       enemy.setData("max", patrol.max);
       enemy.setVelocityX(this.tuning.enemySpeed);
@@ -234,8 +249,10 @@ export class GameScene extends Phaser.Scene {
     const positions = this.level.challenges || [];
 
     positions.forEach((pos, index) => {
+      const center = this.centerFromTopLeft("challenge", pos);
+      const size = this.itemSize("challenge", pos);
       const zone = this.add
-        .rectangle(pos.x, pos.y, pos.width || 170, pos.height || 110, 0x2d7f6d, 0.22)
+        .rectangle(center.x, center.y, size.width, size.height, 0x2d7f6d, 0.22)
         .setStrokeStyle(3, 0xd8cd6c, 0.85);
       this.physics.add.existing(zone, true);
       zone.setData("id", index);
@@ -244,7 +261,7 @@ export class GameScene extends Phaser.Scene {
       zone.setData("question", this.pickQuestion(pos.difficulty || questionLevels[index] || "easy", index));
       this.challengeZones.push(zone);
 
-      this.add.text(pos.x - 78, pos.y - 83, pos.label || `CHALLENGE ${String(index + 1).padStart(2, "0")}`, this.signStyle()).setDepth(3);
+      this.add.text(pos.x, pos.y - 28, pos.label || `CHALLENGE ${String(index + 1).padStart(2, "0")}`, this.signStyle()).setDepth(3);
       this.physics.add.overlap(this.player, zone, () => this.tryStartChallenge(zone));
     });
   }
@@ -256,15 +273,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.merchantZone = this.add.rectangle(merchant.x, merchant.y, merchant.width, merchant.height, 0x345347, 0.25).setStrokeStyle(3, 0xe7d66b);
+    const center = this.centerFromTopLeft("merchant", merchant);
+    const size = this.itemSize("merchant", merchant);
+    this.merchantZone = this.add.rectangle(center.x, center.y, size.width, size.height, 0x345347, 0.25).setStrokeStyle(3, 0xe7d66b);
     this.physics.add.existing(this.merchantZone, true);
     this.physics.add.overlap(this.player, this.merchantZone, () => {
       this.nearMerchant = true;
     });
 
     this.add
-      .text(merchant.x, merchant.y - merchant.height / 2 - 8, "MERCHANT", this.signStyle())
-      .setOrigin(0.5, 1)
+      .text(merchant.x, merchant.y - 8, "MERCHANT", this.signStyle())
+      .setOrigin(0, 1)
       .setDepth(3);
   }
 
@@ -275,7 +294,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.exitGate = this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x8a7440, 0.58).setStrokeStyle(4, 0xe7d66b);
+    const center = this.centerFromTopLeft("exitGate", gate);
+    const size = this.itemSize("exitGate", gate);
+    this.exitGate = this.add.rectangle(center.x, center.y, size.width, size.height, 0x8a7440, 0.58).setStrokeStyle(4, 0xe7d66b);
     this.physics.add.existing(this.exitGate, true);
     this.physics.add.overlap(this.player, this.exitGate, () => {
       this.nearExit = true;
@@ -420,9 +441,10 @@ export class GameScene extends Phaser.Scene {
     for (const enemy of this.enemies.getChildren()) {
       const min = enemy.getData("min");
       const max = enemy.getData("max");
-      if (enemy.x <= min) {
+      const left = enemy.x - ITEM_SIZES.enemy.width / 2;
+      if (left <= min) {
         enemy.setVelocityX(this.tuning.enemySpeed);
-      } else if (enemy.x >= max) {
+      } else if (left >= max) {
         enemy.setVelocityX(-this.tuning.enemySpeed);
       }
     }
@@ -1401,9 +1423,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   addPlatform(x, y, width, height) {
-    const platform = this.platforms.create(x, y, "platform");
+    const platform = this.platforms.create(x + width / 2, y + height / 2, "platform");
     platform.setDisplaySize(width, height);
     platform.refreshBody();
+  }
+
+  itemSize(type, data = {}) {
+    const defaults = ITEM_SIZES[type] || ITEM_SIZES.platform;
+    return {
+      width: data.width || defaults.width,
+      height: data.height || defaults.height
+    };
+  }
+
+  centerFromTopLeft(type, data) {
+    const size = this.itemSize(type, data);
+    return {
+      x: data.x + size.width / 2,
+      y: data.y + size.height / 2
+    };
   }
 
   signStyle() {

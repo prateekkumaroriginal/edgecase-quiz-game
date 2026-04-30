@@ -7,265 +7,266 @@ export const LEVELS = [
     worldWidth: 4300,
     floorY: 652,
     playerSpawn: {
-      x: 90,
-      y: 560
+      x: 72,
+      y: 536
     },
     platforms: [
       {
-        x: 2150,
-        y: 684,
+        x: 0,
+        y: 652,
         width: 4300,
         height: 64
       },
       {
-        x: 2150,
-        y: 684,
+        x: 0,
+        y: 652,
         width: 4300,
         height: 64
       },
       {
-        x: 340,
-        y: 520,
+        x: 230,
+        y: 502,
         width: 220,
-        height: 34
+        height: 36
       },
       {
-        x: 670,
-        y: 440,
+        x: 560,
+        y: 422,
         width: 220,
-        height: 34
+        height: 36
       },
       {
-        x: 1030,
-        y: 535,
+        x: 880,
+        y: 517,
         width: 300,
-        height: 34
+        height: 36
       },
       {
-        x: 1420,
-        y: 455,
-        width: 230,
-        height: 34
+        x: 1304,
+        y: 437,
+        width: 232,
+        height: 36
       },
       {
-        x: 1760,
-        y: 555,
-        width: 270,
-        height: 34
+        x: 1624,
+        y: 537,
+        width: 272,
+        height: 36
       },
       {
-        x: 2150,
-        y: 475,
+        x: 2030,
+        y: 457,
         width: 240,
-        height: 34
+        height: 36
       },
       {
-        x: 2600,
-        y: 548,
+        x: 2440,
+        y: 530,
         width: 320,
-        height: 34
+        height: 36
       },
       {
-        x: 3040,
-        y: 460,
+        x: 2920,
+        y: 442,
         width: 240,
-        height: 34
+        height: 36
       },
       {
-        x: 3380,
-        y: 540,
-        width: 270,
-        height: 34
+        x: 3244,
+        y: 522,
+        width: 272,
+        height: 36
       },
       {
-        x: 3760,
-        y: 438,
-        width: 230,
-        height: 34
+        x: 3644,
+        y: 420,
+        width: 232,
+        height: 36
       }
     ],
     coins: [
       {
-        x: 345,
-        y: 475
+        x: 333,
+        y: 463
       },
       {
-        x: 440,
-        y: 475
+        x: 428,
+        y: 463
       },
       {
-        x: 640,
-        y: 395
+        x: 628,
+        y: 383
       },
       {
-        x: 720,
-        y: 395
+        x: 708,
+        y: 383
       },
       {
-        x: 1110,
-        y: 490
+        x: 1098,
+        y: 478
       },
       {
-        x: 1370,
-        y: 410
+        x: 1358,
+        y: 398
       },
       {
-        x: 1490,
-        y: 410
+        x: 1478,
+        y: 398
       },
       {
-        x: 1830,
-        y: 510
+        x: 1818,
+        y: 498
       },
       {
-        x: 2110,
-        y: 430
+        x: 2098,
+        y: 418
       },
       {
-        x: 2195,
-        y: 430
+        x: 2183,
+        y: 418
       },
       {
-        x: 2670,
-        y: 505
+        x: 2658,
+        y: 493
       },
       {
-        x: 2780,
-        y: 505
+        x: 2768,
+        y: 493
       },
       {
-        x: 3060,
-        y: 415
+        x: 3048,
+        y: 403
       },
       {
-        x: 3150,
-        y: 415
+        x: 3138,
+        y: 403
       },
       {
-        x: 3440,
-        y: 495
+        x: 3428,
+        y: 483
       },
       {
-        x: 3550,
-        y: 495
+        x: 3538,
+        y: 483
       },
       {
-        x: 3770,
-        y: 394
+        x: 3758,
+        y: 382
       },
       {
-        x: 3860,
-        y: 394
+        x: 3848,
+        y: 382
       }
     ],
     hazards: [
       {
-        x: 790,
-        y: 638
+        x: 772,
+        y: 622
       },
       {
-        x: 830,
-        y: 638
+        x: 812,
+        y: 622
       },
       {
-        x: 1580,
-        y: 638
+        x: 1562,
+        y: 622
       },
       {
-        x: 1620,
-        y: 638
+        x: 1602,
+        y: 622
       },
       {
-        x: 2860,
-        y: 638
+        x: 2842,
+        y: 622
       },
       {
-        x: 2900,
-        y: 638
+        x: 2882,
+        y: 622
       },
       {
-        x: 3320,
-        y: 638
+        x: 3302,
+        y: 622
       },
       {
-        x: 3980,
-        y: 638
+        x: 3962,
+        y: 622
       }
     ],
     enemies: [
       {
-        x: 1210,
-        y: 600,
-        min: 1050,
-        max: 1320
+        x: 1190,
+        y: 580,
+        min: 1030,
+        max: 1300
       },
       {
-        x: 2350,
-        y: 600,
-        min: 2250,
-        max: 2490
+        x: 2330,
+        y: 580,
+        min: 2230,
+        max: 2470
       },
       {
-        x: 3560,
-        y: 600,
-        min: 3380,
-        max: 3700
+        x: 3540,
+        y: 580,
+        min: 3360,
+        max: 3680
       }
     ],
     challenges: [
       {
-        x: 920,
-        y: 585,
-        width: 170,
-        height: 110,
+        x: 834,
+        y: 529,
+        width: 172,
+        height: 112,
         label: "CHALLENGE 01"
       },
       {
-        x: 1980,
-        y: 585,
-        width: 170,
-        height: 110,
+        x: 1894,
+        y: 529,
+        width: 172,
+        height: 112,
         label: "CHALLENGE 02"
       },
       {
-        x: 3260,
-        y: 585,
-        width: 170,
-        height: 110,
+        x: 3174,
+        y: 529,
+        width: 172,
+        height: 112,
         label: "CHALLENGE 03"
       }
     ],
     merchant: {
-      x: 2420,
-      y: 590,
+      x: 2300,
+      y: 530,
       width: 240,
       height: 120,
-      npcX: 2420,
-      npcY: 579
+      npcX: 2402,
+      npcY: 555
     },
     exitGate: {
-      x: 4070,
-      y: 582,
-      width: 115,
-      height: 138
+      x: 4012,
+      y: 512,
+      width: 116,
+      height: 140
     },
     signs: [
       {
-        x: 90,
-        y: 585,
+        x: 44,
+        y: 567,
         text: "START"
       },
       {
-        x: 2240,
-        y: 585,
+        x: 2194,
+        y: 567,
         text: "MERCHANT SAFE ZONE"
       },
       {
-        x: 3910,
-        y: 585,
+        x: 3864,
+        y: 567,
         text: "EXIT RUN"
       }
-    ]
+    ],
+    worldHeight: 720
   },
   {
     id: "level-two",
@@ -273,162 +274,163 @@ export const LEVELS = [
     worldWidth: 4300,
     floorY: 652,
     playerSpawn: {
-      x: 57,
-      y: 510
+      x: 39,
+      y: 486
     },
     platforms: [
       {
-        x: 2150,
-        y: 684,
+        x: 0,
+        y: 652,
         width: 4300,
         height: 64
       },
       {
-        x: 310,
-        y: 560,
+        x: 200,
+        y: 544,
         width: 220,
-        height: 30
+        height: 32
       },
       {
-        x: 910,
-        y: 560,
+        x: 800,
+        y: 544,
         width: 220,
-        height: 30
+        height: 32
       },
       {
-        x: 2210,
-        y: 560,
+        x: 2100,
+        y: 544,
         width: 220,
-        height: 30
+        height: 32
       },
       {
-        x: 1890,
-        y: 460,
+        x: 1780,
+        y: 442,
         width: 220,
-        height: 34
+        height: 36
       },
       {
-        x: 1490,
-        y: 260,
+        x: 1380,
+        y: 242,
         width: 220,
-        height: 34
+        height: 36
       }
     ],
     coins: [
       {
-        x: 250,
-        y: 520
+        x: 238,
+        y: 508
       },
       {
-        x: 370,
-        y: 520
+        x: 358,
+        y: 508
       },
       {
-        x: 850,
-        y: 520
+        x: 838,
+        y: 508
       },
       {
-        x: 970,
-        y: 520
+        x: 958,
+        y: 508
       },
       {
-        x: 2120,
-        y: 490
+        x: 2108,
+        y: 478
       },
       {
-        x: 1040,
-        y: 600
+        x: 1028,
+        y: 588
       },
       {
-        x: 1080,
-        y: 600
+        x: 1068,
+        y: 588
       },
       {
-        x: 1830,
-        y: 420
+        x: 1818,
+        y: 408
       },
       {
-        x: 1900,
-        y: 420
+        x: 1888,
+        y: 408
       },
       {
-        x: 1970,
-        y: 420
+        x: 1958,
+        y: 408
       }
     ],
     hazards: [
       {
-        x: 1040,
-        y: 640
+        x: 1022,
+        y: 624
       },
       {
-        x: 1080,
-        y: 640
+        x: 1062,
+        y: 624
       },
       {
-        x: 2120,
-        y: 530
+        x: 2102,
+        y: 514
       }
     ],
     enemies: [
       {
-        x: 450,
-        y: 610,
-        min: 330,
-        max: 570
+        x: 430,
+        y: 590,
+        min: 310,
+        max: 550
       },
       {
-        x: 1300,
-        y: 610,
-        min: 1180,
-        max: 1420
+        x: 1280,
+        y: 590,
+        min: 1160,
+        max: 1400
       },
       {
-        x: 1600,
-        y: 610,
-        min: 1480,
-        max: 1720
+        x: 1580,
+        y: 590,
+        min: 1460,
+        max: 1700
       },
       {
-        x: 1900,
-        y: 610,
-        min: 1780,
-        max: 2020
+        x: 1880,
+        y: 590,
+        min: 1760,
+        max: 2000
       }
     ],
     challenges: [
       {
-        x: 610,
-        y: 590,
-        width: 170,
-        height: 110,
+        x: 524,
+        y: 534,
+        width: 172,
+        height: 112,
         label: "CHALLENGE 01",
         difficulty: "hard"
       },
       {
-        x: 2590,
-        y: 540,
-        width: 170,
-        height: 110,
+        x: 2504,
+        y: 484,
+        width: 172,
+        height: 112,
         label: "CHALLENGE 02",
         difficulty: "medium"
       }
     ],
     merchant: {
-      x: 3020,
-      y: 590,
+      x: 2900,
+      y: 530,
       width: 240,
       height: 120,
-      npcX: 2870,
-      npcY: 559
+      npcX: 2852,
+      npcY: 535
     },
     exitGate: {
-      x: 1490,
-      y: 170,
-      width: 115,
-      height: 138
+      x: 1432,
+      y: 100,
+      width: 116,
+      height: 140
     },
-    signs: []
+    signs: [],
+    worldHeight: 720
   },
   {
     id: "new-level-ewoifnw123",
@@ -436,13 +438,13 @@ export const LEVELS = [
     worldWidth: 4300,
     floorY: 652,
     playerSpawn: {
-      x: 180,
-      y: 490
+      x: 162,
+      y: 466
     },
     platforms: [
       {
-        x: 2150,
-        y: 684,
+        x: 0,
+        y: 652,
         width: 4300,
         height: 64
       }
@@ -451,19 +453,19 @@ export const LEVELS = [
     hazards: [],
     enemies: [
       {
-        x: 380,
-        y: 540,
-        min: 260,
-        max: 500
+        x: 360,
+        y: 520,
+        min: 240,
+        max: 480
       }
     ],
     challenges: [],
     merchant: null,
     exitGate: {
-      x: 600,
-      y: 480,
-      width: 115,
-      height: 138
+      x: 542,
+      y: 410,
+      width: 116,
+      height: 140
     },
     signs: [],
     worldHeight: 720
