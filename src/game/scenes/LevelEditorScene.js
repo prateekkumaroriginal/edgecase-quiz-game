@@ -1261,31 +1261,35 @@ export class LevelEditorScene extends Phaser.Scene {
     const width = Math.round(bounds.right - bounds.left);
     const height = Math.round(bounds.bottom - bounds.top);
     const zoom = this.cameras.main.zoom;
-    const handleSize = Math.max(6 / zoom, 8 / zoom);
-    const handleOffset = handleSize / 2;
-    const hitSize = Math.max(14 / zoom, handleSize);
-    const handlePoints = [
-      { id: "nw", cursor: "nwse-resize", x: bounds.left, y: bounds.top },
-      { id: "n", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.top },
-      { id: "ne", cursor: "nesw-resize", x: bounds.right, y: bounds.top },
-      { id: "e", cursor: "ew-resize", x: bounds.right, y: bounds.top + (bounds.bottom - bounds.top) / 2 },
-      { id: "se", cursor: "nwse-resize", x: bounds.right, y: bounds.bottom },
-      { id: "s", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.bottom },
-      { id: "sw", cursor: "nesw-resize", x: bounds.left, y: bounds.bottom },
-      { id: "w", cursor: "ew-resize", x: bounds.left, y: bounds.top + (bounds.bottom - bounds.top) / 2 }
-    ];
 
     graphics.lineStyle(Math.max(1 / zoom, 2 / zoom), 0xf4e786, 1);
     graphics.strokeRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
-    graphics.lineStyle(Math.max(1 / zoom, 1 / zoom), 0x07100f, 1);
-    for (const handle of handlePoints) {
-      graphics.fillStyle(0xf4e786, 1);
-      graphics.fillRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
-      graphics.strokeRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
-      this.selectionOverlay.handles.push({
-        ...handle,
-        hitArea: new Phaser.Geom.Rectangle(handle.x - hitSize / 2, handle.y - hitSize / 2, hitSize, hitSize)
-      });
+
+    if (this.selection.length === 1 && this.canResizeObject(this.selected)) {
+      const handleSize = Math.max(6 / zoom, 8 / zoom);
+      const handleOffset = handleSize / 2;
+      const hitSize = Math.max(14 / zoom, handleSize);
+      const handlePoints = [
+        { id: "nw", cursor: "nwse-resize", x: bounds.left, y: bounds.top },
+        { id: "n", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.top },
+        { id: "ne", cursor: "nesw-resize", x: bounds.right, y: bounds.top },
+        { id: "e", cursor: "ew-resize", x: bounds.right, y: bounds.top + (bounds.bottom - bounds.top) / 2 },
+        { id: "se", cursor: "nwse-resize", x: bounds.right, y: bounds.bottom },
+        { id: "s", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.bottom },
+        { id: "sw", cursor: "nesw-resize", x: bounds.left, y: bounds.bottom },
+        { id: "w", cursor: "ew-resize", x: bounds.left, y: bounds.top + (bounds.bottom - bounds.top) / 2 }
+      ];
+
+      graphics.lineStyle(Math.max(1 / zoom, 1 / zoom), 0x07100f, 1);
+      for (const handle of handlePoints) {
+        graphics.fillStyle(0xf4e786, 1);
+        graphics.fillRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
+        graphics.strokeRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
+        this.selectionOverlay.handles.push({
+          ...handle,
+          hitArea: new Phaser.Geom.Rectangle(handle.x - hitSize / 2, handle.y - hitSize / 2, hitSize, hitSize)
+        });
+      }
     }
 
     label.setText(`${width} x ${height}`);
