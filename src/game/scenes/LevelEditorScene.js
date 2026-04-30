@@ -122,8 +122,6 @@ export class LevelEditorScene extends Phaser.Scene {
     this.input.on("wheel", (pointer, _objects, dx, dy, event) => this.onWheel(pointer, dx, dy, event));
 
     this.keys = this.input.keyboard.addKeys({
-      left: Phaser.Input.Keyboard.KeyCodes.LEFT,
-      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
       del: Phaser.Input.Keyboard.KeyCodes.DELETE,
       d: Phaser.Input.Keyboard.KeyCodes.D,
       c: Phaser.Input.Keyboard.KeyCodes.C,
@@ -264,15 +262,6 @@ export class LevelEditorScene extends Phaser.Scene {
   update() {
     if (this.isTypingInDomField()) {
       return;
-    }
-
-    const speed = 16;
-    if (this.keys.left.isDown) {
-      this.cameras.main.scrollX -= speed;
-      this.clampCameraScroll();
-    } else if (this.keys.right.isDown) {
-      this.cameras.main.scrollX += speed;
-      this.clampCameraScroll();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.zero) && this.keys.ctrl.isDown) {
