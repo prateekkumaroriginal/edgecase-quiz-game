@@ -721,9 +721,8 @@ export class LevelEditorScene extends Phaser.Scene {
     graphics.strokeRect(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
     this.worldChrome.add(graphics);
 
-    const topLabel = this.add.text(14, 8, "TOP", this.smallStyle("#ffb0a6")).setDepth(-19);
     const groundLabel = this.add.text(14, this.groundTop() - 22, "GROUND", this.smallStyle("#f4e786")).setDepth(-19);
-    this.worldChrome.add([topLabel, groundLabel]);
+    this.worldChrome.add(groundLabel);
 
     this.cameras.main.setBounds(0, -DEAD_CANVAS_TOP, width + DEAD_CANVAS_RIGHT, height + DEAD_CANVAS_TOP + DEAD_CANVAS_BOTTOM);
   }
