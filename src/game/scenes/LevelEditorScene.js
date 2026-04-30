@@ -44,6 +44,9 @@ const ZOOM_STEP = 0.1;
 const DEFAULT_ZOOM = 1;
 const GRID_SIZES = [4, 8, 16, 32, 64];
 const DEFAULT_GRID_SIZE = 16;
+const MIN_RESIZE_SIZE = 8;
+const NUDGE_INITIAL_REPEAT_DELAY_MS = 250;
+const NUDGE_REPEAT_MS = 55;
 
 const FIELD_CONFIG = {
   platform: [
@@ -74,10 +77,13 @@ export class LevelEditorScene extends Phaser.Scene {
     this.selected = null;
     this.selection = [];
     this.dragging = null;
+    this.resizing = null;
     this.cameraDrag = null;
     this.areaSelection = null;
     this.hoveredObject = null;
     this.placementPreview = null;
+    this.selectionOverlay = null;
+    this.nudgeRepeat = { signature: "", startedAt: 0, lastAt: 0 };
     this.hudVisible = true;
     this.gridSize = DEFAULT_GRID_SIZE;
     this.snapEnabled = true;
@@ -129,10 +135,20 @@ export class LevelEditorScene extends Phaser.Scene {
       ctrl: Phaser.Input.Keyboard.KeyCodes.CTRL,
       shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
       alt: Phaser.Input.Keyboard.KeyCodes.ALT,
+      left: Phaser.Input.Keyboard.KeyCodes.LEFT,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      up: Phaser.Input.Keyboard.KeyCodes.UP,
+      down: Phaser.Input.Keyboard.KeyCodes.DOWN,
       zero: Phaser.Input.Keyboard.KeyCodes.ZERO,
       i: Phaser.Input.Keyboard.KeyCodes.I,
       esc: Phaser.Input.Keyboard.KeyCodes.ESC
     });
+    this.input.keyboard.addCapture([
+      Phaser.Input.Keyboard.KeyCodes.LEFT,
+      Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      Phaser.Input.Keyboard.KeyCodes.UP,
+      Phaser.Input.Keyboard.KeyCodes.DOWN
+    ]);
   }
 
   createDomHud() {
@@ -259,7 +275,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.updateCursorCoordinates();
   }
 
-  update() {
+  update(time) {
     if (this.isTypingInDomField()) {
       return;
     }
@@ -270,6 +286,9 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     this.updateGridControls();
+    if (this.handleKeyboardNudge(time)) {
+      return;
+    }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.i) && this.keys.ctrl.isDown) {
       this.toggleHud();
@@ -421,6 +440,7 @@ export class LevelEditorScene extends Phaser.Scene {
 
     this.clampCameraScroll();
     this.updateZoomIndicator();
+    this.updateSelectionOverlay();
   }
 
   handleWindowPointerUp = () => {
@@ -445,6 +465,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.cameras.main.setZoom(DEFAULT_ZOOM);
     this.clampCameraScroll();
     this.updateZoomIndicator();
+    this.updateSelectionOverlay();
   }
 
   onPointerDown(pointer) {
@@ -460,7 +481,7 @@ export class LevelEditorScene extends Phaser.Scene {
       return;
     }
 
-    if (this.areaSelection || this.dragging || this.cameraDrag) {
+    if (this.areaSelection || this.dragging || this.resizing || this.cameraDrag) {
       this.cancelPointerInteraction();
     }
 
@@ -468,6 +489,12 @@ export class LevelEditorScene extends Phaser.Scene {
     if (!worldPoint) return;
     this.cursorWorldPoint = worldPoint;
     this.updateCursorCoordinates();
+
+    const resizeHandle = this.findResizeHandleAt(worldPoint.x, worldPoint.y);
+    if (resizeHandle) {
+      this.startResize(resizeHandle, worldPoint, pointer);
+      return;
+    }
 
     if (this.keys.shift.isDown) {
       this.startCameraDrag(pointer);
@@ -515,7 +542,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.updateCursorCoordinates();
       this.setHoveredObject(null);
       this.updatePlacementPreview(null);
-      if (!pointer.isDown && (this.areaSelection || this.dragging || this.cameraDrag)) {
+      if (!pointer.isDown && (this.areaSelection || this.dragging || this.resizing || this.cameraDrag)) {
         this.cancelPointerInteraction();
       }
       return;
@@ -529,6 +556,12 @@ export class LevelEditorScene extends Phaser.Scene {
       return;
     }
 
+    if (this.resizing) {
+      this.updatePlacementPreview(null);
+      this.updateResize(worldPoint, pointer);
+      return;
+    }
+
     const world = this.snapPoint(worldPoint.x, worldPoint.y, pointer);
     if (this.areaSelection) {
       this.updatePlacementPreview(null);
@@ -537,6 +570,7 @@ export class LevelEditorScene extends Phaser.Scene {
     }
 
     if (!this.dragging) {
+      this.updateResizeCursor(worldPoint.x, worldPoint.y);
       this.setHoveredObject(this.findObjectAt(world.x, world.y));
       this.updatePlacementPreview(pointer);
       return;
@@ -552,22 +586,37 @@ export class LevelEditorScene extends Phaser.Scene {
       this.clampDataToEditableArea(item.obj.type, item.obj.data);
       this.syncVisual(item.obj);
     }
+    this.updateSelectionOverlay();
     this.refreshInspectorValues();
     this.markDirty();
   }
 
   onPointerUp() {
     const draggedObjects = this.dragging?.objects.map(({ obj }) => obj) || [];
+    const resizedObject = this.resizing?.obj || null;
     this.finishAreaSelection();
     this.dragging = null;
+    this.resizing = null;
     this.cameraDrag = null;
     this.input.setDefaultCursor("default");
+    if (resizedObject) {
+      this.expandWorldToIncludeObjects([resizedObject]);
+      this.clampDataToWorld(resizedObject.type, resizedObject.data);
+      this.syncVisual(resizedObject);
+      this.updateSelectionOverlay();
+      this.redrawWorldChrome();
+      this.resizeWorldViewport();
+      this.refreshInspectorValues();
+      this.markDirty();
+      return;
+    }
     if (draggedObjects.length > 0) {
       this.expandWorldToIncludeObjects(draggedObjects);
       draggedObjects.forEach((obj) => {
         this.clampDataToWorld(obj.type, obj.data);
         this.syncVisual(obj);
       });
+      this.updateSelectionOverlay();
       this.redrawWorldChrome();
       this.resizeWorldViewport();
       this.refreshInspectorValues();
@@ -581,6 +630,7 @@ export class LevelEditorScene extends Phaser.Scene {
       this.areaSelection = null;
     }
     this.dragging = null;
+    this.resizing = null;
     this.cameraDrag = null;
     this.input.setDefaultCursor("default");
   }
@@ -652,6 +702,9 @@ export class LevelEditorScene extends Phaser.Scene {
       if (obj.patrol) obj.patrol.destroy();
     }
     this.objects = [];
+    this.selected = null;
+    this.selection = [];
+    this.updateSelectionOverlay();
 
     this.addObjects("platform", this.draft.platforms);
     this.addObjects("coin", this.draft.coins);
@@ -705,6 +758,9 @@ export class LevelEditorScene extends Phaser.Scene {
     if (obj.patrol) {
       obj.patrol.destroy();
       obj.patrol = this.add.line(0, 0, obj.data.min, obj.data.y + 36, obj.data.max, obj.data.y + 36, 0xe7d66b, 0.8).setOrigin(0).setDepth(8);
+    }
+    if (this.selection.includes(obj)) {
+      this.updateSelectionOverlay();
     }
   }
 
@@ -997,6 +1053,140 @@ export class LevelEditorScene extends Phaser.Scene {
     };
   }
 
+  handleKeyboardNudge(time = 0) {
+    if (!this.selected || this.selection.length === 0) return false;
+    if (this.keys.ctrl.isDown) return false;
+
+    let dx = 0;
+    let dy = 0;
+    if (this.keys.left.isDown) dx -= 1;
+    if (this.keys.right.isDown) dx += 1;
+    if (this.keys.up.isDown) dy -= 1;
+    if (this.keys.down.isDown) dy += 1;
+    if (dx === 0 && dy === 0) {
+      this.nudgeRepeat.signature = "";
+      this.nudgeRepeat.startedAt = 0;
+      this.nudgeRepeat.lastAt = 0;
+      return false;
+    }
+
+    const signature = `${dx}:${dy}:${this.keys.shift.isDown ? "grid" : "px"}`;
+    const justPressed =
+      Phaser.Input.Keyboard.JustDown(this.keys.left) ||
+      Phaser.Input.Keyboard.JustDown(this.keys.right) ||
+      Phaser.Input.Keyboard.JustDown(this.keys.up) ||
+      Phaser.Input.Keyboard.JustDown(this.keys.down) ||
+      signature !== this.nudgeRepeat.signature;
+    if (justPressed) {
+      this.moveSelectionBy(dx * (this.keys.shift.isDown ? (this.gridSize || DEFAULT_GRID_SIZE) : 1), dy * (this.keys.shift.isDown ? (this.gridSize || DEFAULT_GRID_SIZE) : 1));
+      this.nudgeRepeat.signature = signature;
+      this.nudgeRepeat.startedAt = time;
+      this.nudgeRepeat.lastAt = time;
+      return true;
+    }
+
+    const initialDelayElapsed = time - this.nudgeRepeat.startedAt >= NUDGE_INITIAL_REPEAT_DELAY_MS;
+    const shouldRepeat = initialDelayElapsed && time - this.nudgeRepeat.lastAt >= NUDGE_REPEAT_MS;
+    if (!justPressed && !shouldRepeat) return true;
+
+    const amount = this.keys.shift.isDown ? (this.gridSize || DEFAULT_GRID_SIZE) : 1;
+    this.moveSelectionBy(dx * amount, dy * amount);
+    this.nudgeRepeat.lastAt = time;
+    return true;
+  }
+
+  moveSelectionBy(dx, dy) {
+    const items = this.selection.map((obj) => ({ obj, startX: obj.data.x, startY: obj.data.y }));
+    const clampedDelta = this.clampedEditableSelectionDelta(items, dx, dy);
+    if (clampedDelta.dx === 0 && clampedDelta.dy === 0) return;
+
+    for (const item of items) {
+      item.obj.data.x = item.startX + clampedDelta.dx;
+      item.obj.data.y = item.startY + clampedDelta.dy;
+      this.clampDataToEditableArea(item.obj.type, item.obj.data);
+      this.syncVisual(item.obj);
+    }
+
+    this.expandWorldToIncludeObjects(this.selection);
+    this.selection.forEach((obj) => {
+      this.clampDataToWorld(obj.type, obj.data);
+      this.syncVisual(obj);
+    });
+    this.redrawWorldChrome();
+    this.resizeWorldViewport();
+    this.updateSelectionOverlay();
+    this.refreshInspectorValues();
+    this.markDirty();
+  }
+
+  canResizeObject(obj) {
+    return Boolean(obj) && !["coin", "hazard", "enemy", "playerSpawn"].includes(obj.type);
+  }
+
+  findResizeHandleAt(x, y) {
+    if (!this.selectionOverlay?.handles?.length || this.selection.length !== 1 || !this.canResizeObject(this.selected)) {
+      return null;
+    }
+
+    return this.selectionOverlay.handles.find((handle) => {
+      return Phaser.Geom.Rectangle.Contains(handle.hitArea, x, y);
+    }) || null;
+  }
+
+  updateResizeCursor(x, y) {
+    const handle = this.findResizeHandleAt(x, y);
+    this.input.setDefaultCursor(handle ? handle.cursor : "default");
+  }
+
+  startResize(handle, point, pointer) {
+    const obj = this.selected;
+    const bounds = this.objectBounds(obj.type, obj.data);
+    const startPoint = this.snapPoint(point.x, point.y, pointer);
+    this.resizing = {
+      obj,
+      handle: handle.id,
+      startX: startPoint.x,
+      startY: startPoint.y,
+      startBounds: bounds
+    };
+    this.input.setDefaultCursor(handle.cursor);
+  }
+
+  updateResize(point, pointer) {
+    const { obj, handle, startBounds } = this.resizing;
+    const world = this.snapPoint(point.x, point.y, pointer);
+    const dx = world.x - this.resizing.startX;
+    const dy = world.y - this.resizing.startY;
+    let left = startBounds.left;
+    let right = startBounds.right;
+    let top = startBounds.top;
+    let bottom = startBounds.bottom;
+
+    if (handle.includes("w")) left += dx;
+    if (handle.includes("e")) right += dx;
+    if (handle.includes("n")) top += dy;
+    if (handle.includes("s")) bottom += dy;
+
+    if (right - left < MIN_RESIZE_SIZE) {
+      if (handle.includes("w")) left = right - MIN_RESIZE_SIZE;
+      else right = left + MIN_RESIZE_SIZE;
+    }
+    if (bottom - top < MIN_RESIZE_SIZE) {
+      if (handle.includes("n")) top = bottom - MIN_RESIZE_SIZE;
+      else bottom = top + MIN_RESIZE_SIZE;
+    }
+
+    obj.data.width = right - left;
+    obj.data.height = bottom - top;
+    obj.data.x = left + obj.data.width / 2;
+    obj.data.y = top + obj.data.height / 2;
+    this.clampDataToEditableArea(obj.type, obj.data);
+    this.syncVisual(obj);
+    this.updateSelectionOverlay();
+    this.refreshInspectorValues();
+    this.markDirty();
+  }
+
   selectObject(obj) {
     this.selectObjects([obj], obj);
   }
@@ -1011,8 +1201,73 @@ export class LevelEditorScene extends Phaser.Scene {
       item.visual.setStrokeStyle(selected ? 5 : 3, selected ? 0xf4e786 : colors.stroke);
       item.visual.setAlpha(1);
     });
+    this.updateSelectionOverlay();
     this.updateToolButtons();
     this.renderInspector();
+  }
+
+  updateSelectionOverlay() {
+    if (!this.selectionOverlay) {
+      this.selectionOverlay = {
+        graphics: this.add.graphics().setDepth(120),
+        label: this.add.text(0, 0, "", {
+          ...this.smallStyle("#07100f"),
+          backgroundColor: "#f4e786",
+          padding: { x: 6, y: 3 }
+        }).setDepth(121).setVisible(false)
+      };
+    }
+
+    const { graphics, label } = this.selectionOverlay;
+    graphics.clear();
+    this.selectionOverlay.handles = [];
+    if (!this.selection.length) {
+      label.setVisible(false);
+      return;
+    }
+
+    const bounds = this.unionObjectBounds(this.selection);
+    if (!bounds) {
+      label.setVisible(false);
+      return;
+    }
+
+    const left = Math.round(bounds.left);
+    const top = Math.round(bounds.top);
+    const width = Math.round(bounds.right - bounds.left);
+    const height = Math.round(bounds.bottom - bounds.top);
+    const zoom = this.cameras.main.zoom;
+    const handleSize = Math.max(6 / zoom, 8 / zoom);
+    const handleOffset = handleSize / 2;
+    const hitSize = Math.max(14 / zoom, handleSize);
+    const handlePoints = [
+      { id: "nw", cursor: "nwse-resize", x: bounds.left, y: bounds.top },
+      { id: "n", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.top },
+      { id: "ne", cursor: "nesw-resize", x: bounds.right, y: bounds.top },
+      { id: "e", cursor: "ew-resize", x: bounds.right, y: bounds.top + (bounds.bottom - bounds.top) / 2 },
+      { id: "se", cursor: "nwse-resize", x: bounds.right, y: bounds.bottom },
+      { id: "s", cursor: "ns-resize", x: bounds.left + (bounds.right - bounds.left) / 2, y: bounds.bottom },
+      { id: "sw", cursor: "nesw-resize", x: bounds.left, y: bounds.bottom },
+      { id: "w", cursor: "ew-resize", x: bounds.left, y: bounds.top + (bounds.bottom - bounds.top) / 2 }
+    ];
+
+    graphics.lineStyle(Math.max(1 / zoom, 2 / zoom), 0xf4e786, 1);
+    graphics.strokeRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+    graphics.lineStyle(Math.max(1 / zoom, 1 / zoom), 0x07100f, 1);
+    for (const handle of handlePoints) {
+      graphics.fillStyle(0xf4e786, 1);
+      graphics.fillRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
+      graphics.strokeRect(handle.x - handleOffset, handle.y - handleOffset, handleSize, handleSize);
+      this.selectionOverlay.handles.push({
+        ...handle,
+        hitArea: new Phaser.Geom.Rectangle(handle.x - hitSize / 2, handle.y - hitSize / 2, hitSize, hitSize)
+      });
+    }
+
+    label.setText(`${width} x ${height}`);
+    label.setScale(1 / zoom);
+    label.setPosition(left, top - 24 / zoom);
+    label.setVisible(true);
   }
 
   renderInspector() {
@@ -1096,6 +1351,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.selected.data[key] = type === "number" ? Number(value) || 0 : value;
     this.clampDataToWorld(this.selected.type, this.selected.data);
     this.syncVisual(this.selected);
+    this.updateSelectionOverlay();
     this.markDirty();
   }
 
@@ -1342,6 +1598,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.selected = null;
     this.selection = [];
     this.clearObjectFocus();
+    this.updateSelectionOverlay();
     this.renderInspector();
   }
 
@@ -1470,6 +1727,9 @@ export class LevelEditorScene extends Phaser.Scene {
     window.removeEventListener("pointerup", this.handleWindowPointerUp);
     window.removeEventListener("blur", this.handleWindowPointerCancel);
     this.scale?.off(Phaser.Scale.Events.RESIZE, this.resizeWorldViewport, this);
+    this.selectionOverlay?.graphics.destroy();
+    this.selectionOverlay?.label.destroy();
+    this.selectionOverlay = null;
     this.hudRoot?.remove();
     this.hudRoot = null;
   }
