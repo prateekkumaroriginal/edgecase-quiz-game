@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Hammer, Play, Settings } from "lucide-react";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
@@ -8,6 +8,7 @@ function cx(...classes) {
 }
 
 export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
+  const screenRef = useRef(null);
   const [focusedRow, setFocusedRow] = useState(0);
   const actions = useMemo(() => {
     const items = [
@@ -42,6 +43,10 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
   }, [actions, focusedRow]);
 
   useEffect(() => {
+    screenRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       if (event.repeat) {
         return;
@@ -59,13 +64,15 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [actions.length, selectFocused]);
 
   return (
     <section
-      className="absolute inset-0 z-[5] overflow-hidden bg-[radial-gradient(circle_at_27%_42%,rgba(12,69,55,0.18),transparent_28%),linear-gradient(180deg,#010807_0%,#03100e_52%,#010605_100%)] px-[clamp(44px,5vw,70px)] py-[clamp(34px,5vw,60px)] font-['Cascadia_Mono',Consolas,monospace] text-[#edf8ed] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(73,180,150,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(73,180,150,0.025)_1px,transparent_1px)] before:bg-[size:26px_26px] before:content-[''] before:[mask-image:linear-gradient(90deg,transparent_0%,#000_46%,#000_100%)] max-[900px]:px-6 max-[900px]:py-7"
+      ref={screenRef}
+      tabIndex={-1}
+      className="absolute inset-0 z-[5] overflow-hidden bg-[radial-gradient(circle_at_27%_42%,rgba(12,69,55,0.18),transparent_28%),linear-gradient(180deg,#010807_0%,#03100e_52%,#010605_100%)] px-[clamp(44px,5vw,70px)] py-[clamp(34px,5vw,60px)] font-['Cascadia_Mono',Consolas,monospace] text-[#edf8ed] outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(73,180,150,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(73,180,150,0.025)_1px,transparent_1px)] before:bg-[size:26px_26px] before:content-[''] before:[mask-image:linear-gradient(90deg,transparent_0%,#000_46%,#000_100%)] max-[900px]:px-6 max-[900px]:py-7"
       aria-label="Main menu"
     >
       <header className="relative z-[2] flex items-start justify-between gap-8 max-[900px]:items-stretch">

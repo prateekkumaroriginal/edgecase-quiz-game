@@ -77,6 +77,7 @@ canvas {
   inset: 0;
   z-index: 5;
   overflow: hidden;
+  outline: 0;
   padding: clamp(34px, 5vw, 60px) clamp(44px, 5vw, 70px);
   background:
     radial-gradient(circle at 27% 42%, rgba(12, 69, 55, 0.18), transparent 28%),

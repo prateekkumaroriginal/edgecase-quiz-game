@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Monitor, Music, Volume2 } from "lucide-react";
 import {
   getBorderlessEnabled,
@@ -21,6 +21,7 @@ function percent(value) {
 }
 
 export function SettingsScreen({ onBack }) {
+  const screenRef = useRef(null);
   const [soundVolume, setSoundVolumeState] = useState(() => getSoundVolume());
   const [musicVolume, setMusicVolumeState] = useState(() => getMusicVolume());
   const [borderless, setBorderlessState] = useState(() => getBorderlessEnabled());
@@ -33,6 +34,10 @@ export function SettingsScreen({ onBack }) {
     setStatusMessage(message);
     window.clearTimeout(showStatus.timer);
     showStatus.timer = window.setTimeout(() => setStatusMessage(""), 1800);
+  }, []);
+
+  useEffect(() => {
+    screenRef.current?.focus();
   }, []);
 
   useEffect(() => {
@@ -140,8 +145,8 @@ export function SettingsScreen({ onBack }) {
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [adjustFocused, focusedRow, onBack, toggleWindowMode]);
 
   const windowLabel = useMemo(() => {
@@ -150,7 +155,7 @@ export function SettingsScreen({ onBack }) {
   }, [borderless, windowModeAvailable, windowModeChecked]);
 
   return (
-    <section className="settings-screen" aria-label="Settings">
+    <section ref={screenRef} tabIndex={-1} className="settings-screen" aria-label="Settings">
       <header className="settings-header">
         <div>
           <h1>SETTINGS</h1>
