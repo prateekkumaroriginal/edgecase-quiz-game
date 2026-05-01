@@ -89,7 +89,7 @@ export function getViewportStyleVars(metrics) {
     "--settings-subtitle-margin-top": `${clamp(30 * metrics.uiScale, 18, 30)}px`,
     "--settings-back-height": `${clamp(62 * metrics.uiScale, 54, 62)}px`,
     "--settings-back-pad-x": `${clamp(32 * metrics.uiScale, 22, 32)}px`,
-    "--settings-back-font-size": `${clamp(27 * metrics.uiScale, 21, 27)}px`,
+    "--settings-back-font-size": "30px",
     "--settings-row-icon-size": `${clamp(58 * metrics.uiScale, 44, 58)}px`,
     "--settings-row-heading-size": `${clamp(30 * metrics.uiScale, 23, 30)}px`,
     "--settings-row-copy-size": `${clamp(16 * metrics.uiScale, 14, 16)}px`,

@@ -1,6 +1,7 @@
 import { QUESTIONS } from "../data/questions.js";
 import { UPGRADES } from "../data/upgrades.js";
 import { DEFAULT_LEVEL_ID, LEVELS } from "../data/levels.js";
+import { emitGameEvent, gameEvents } from "../gameEvents.js";
 import { getMusicVolume, getSoundEnabled, getSoundVolume } from "../settings.js";
 
 const CHALLENGE_SECONDS = 18;
@@ -89,8 +90,18 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.input.once("pointerdown", () => this.ensureAudio());
     this.input.keyboard.once("keydown", () => this.ensureAudio());
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.stopMusic());
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.stopMusic());
+    this.pauseActionHandler = (event) => this.executePauseAction(event.detail?.action);
+    gameEvents.addEventListener("edgecase:pause-action", this.pauseActionHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      gameEvents.removeEventListener("edgecase:pause-action", this.pauseActionHandler);
+      this.destroyPauseMenu();
+      this.stopMusic();
+    });
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => {
+      gameEvents.removeEventListener("edgecase:pause-action", this.pauseActionHandler);
+      this.destroyPauseMenu();
+      this.stopMusic();
+    });
   }
 
   getActiveLevel() {
@@ -354,17 +365,14 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (this.paused) return;
+
     if (Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
       if (this.merchantOpen) {
         this.closeMerchant();
       } else {
         this.togglePause();
       }
-      return;
-    }
-
-    if (this.paused) {
-      this.updatePauseInput();
       return;
     }
 
@@ -539,100 +547,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   createPauseMenu() {
-    if (this.pauseUi) {
-      return;
-    }
-
     this.pauseSelectedIndex = 0;
-    this.pauseUi = this.add.container(0, 0).setScrollFactor(0).setDepth(120);
-    this.pauseUi.add(this.add.rectangle(640, 360, 1280, 720, 0x07100f, 0.72));
-    this.pauseUi.add(this.add.rectangle(640, 360, 520, 360, 0x08100f, 0.96).setStrokeStyle(4, 0xe7d66b));
-    this.pauseUi.add(this.add.text(506, 190, "PAUSED", {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: "64px",
-      color: "#e7d66b",
-      stroke: "#101814",
-      strokeThickness: 6
-    }));
-
-    const buttons = [
-      { y: 302, label: "RESUME", action: "resume" },
-      { y: 374, label: "RESTART RUN", action: "restart" },
-      { y: 446, label: "MAIN MENU", action: "menu" }
-    ];
-
-    this.pauseButtons = buttons.map((button, index) => {
-      const rect = this.add
-        .rectangle(640, button.y, 310, 52, 0x1a2a23, 1)
-        .setStrokeStyle(2, 0xe7d66b)
-        .setInteractive({ useHandCursor: true });
-      const text = this.add.text(640, button.y - 15, button.label, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "22px",
-        color: "#edf8ed"
-      }).setOrigin(0.5, 0);
-      rect.on("pointerover", () => {
-        this.pauseSelectedIndex = index;
-        this.updatePauseFocus();
-      });
-      rect.on("pointerout", () => this.updatePauseFocus());
-      rect.on("pointerdown", () => this.executePauseAction(button.action));
-      this.pauseUi.add([rect, text]);
-      return { ...button, rect, text };
-    });
-
-    this.pauseUi.add(this.add.text(640, 514, "W/S or arrows select  |  Space/Enter choose", {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "16px",
-      color: "#b8c7b5"
-    }).setOrigin(0.5, 0));
-
-    this.pauseUi.setAlpha(0);
-    this.pauseUi.setScale(0.98);
-    this.tweens.add({
-      targets: this.pauseUi,
-      alpha: 1,
-      scale: 1,
-      duration: 115,
-      ease: "Quad.easeOut"
-    });
-    this.updatePauseFocus();
-  }
-
-  updatePauseInput() {
-    if (this.menuUpPressed()) {
-      this.pauseSelectedIndex = Phaser.Math.Wrap(this.pauseSelectedIndex - 1, 0, this.pauseButtons.length);
-      this.updatePauseFocus();
-      this.playTone("menu");
-    } else if (this.menuDownPressed()) {
-      this.pauseSelectedIndex = Phaser.Math.Wrap(this.pauseSelectedIndex + 1, 0, this.pauseButtons.length);
-      this.updatePauseFocus();
-      this.playTone("menu");
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
-      this.executePauseAction("restart");
-    } else if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
-      this.executePauseAction("menu");
-    } else if (Phaser.Input.Keyboard.JustDown(this.keys.enter) || Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-      this.executePauseAction(this.pauseButtons[this.pauseSelectedIndex].action);
-    }
-  }
-
-  updatePauseFocus() {
-    if (!this.pauseButtons) {
-      return;
-    }
-
-    this.pauseButtons.forEach((button, index) => {
-      const focused = index === this.pauseSelectedIndex;
-      button.rect.setFillStyle(focused ? 0x2f5546 : 0x1a2a23);
-      button.rect.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : 0xe7d66b);
-      button.text.setColor(focused ? "#f4e786" : "#edf8ed");
-    });
+    emitGameEvent("edgecase:pause-open");
   }
 
   executePauseAction(action) {
+    if (!this.paused || !action) {
+      return;
+    }
+
     if (action === "resume") {
       this.togglePause();
       return;
@@ -644,27 +567,16 @@ export class GameScene extends Phaser.Scene {
 
     if (action === "restart") {
       this.scene.restart();
+    } else if (action === "level-select") {
+      this.scene.stop();
+      emitGameEvent("edgecase:navigate-level-select");
     } else {
       this.scene.start("MenuScene");
     }
   }
 
   destroyPauseMenu() {
-    if (!this.pauseUi) {
-      return;
-    }
-
-    const ui = this.pauseUi;
-    this.pauseUi = null;
-    this.pauseButtons = null;
-    this.tweens.add({
-      targets: ui,
-      alpha: 0,
-      scale: 0.98,
-      duration: 85,
-      ease: "Quad.easeIn",
-      onComplete: () => ui.destroy(true)
-    });
+    emitGameEvent("edgecase:pause-close");
   }
 
   tryStartChallenge(zone) {
@@ -1191,7 +1103,7 @@ export class GameScene extends Phaser.Scene {
     const button = this.add.rectangle(x, y, width, 62, fill).setScrollFactor(0).setDepth(101).setInteractive({ useHandCursor: true });
     this.add.text(x, y, label, {
       fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: label.length > 9 ? "30px" : "34px",
+      fontSize: label === "BACK" || label.length > 9 ? "30px" : "34px",
       color
     }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
     return button;

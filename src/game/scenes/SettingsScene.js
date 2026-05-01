@@ -86,7 +86,7 @@ export class SettingsScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     const label = this.add.text(1080, 92, "BACK", {
       fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "22px",
+      fontSize: "30px",
       color: "#edf8ed"
     }).setOrigin(0.5);
     rect.on("pointerdown", () => this.goBack());

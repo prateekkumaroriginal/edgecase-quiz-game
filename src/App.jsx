@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createGame } from "./game/createGame.js";
 import { DEFAULT_LEVEL_ID } from "./game/data/levels.js";
-import { gameEvents } from "./game/gameEvents.js";
+import { emitGameEvent, gameEvents } from "./game/gameEvents.js";
 import { LevelSelectScreen } from "./ui/LevelSelectScreen.jsx";
 import { MenuScreen } from "./ui/MenuScreen.jsx";
+import { PauseScreen } from "./ui/PauseScreen.jsx";
 import { SettingsScreen } from "./ui/SettingsScreen.jsx";
 import { getViewportStyleVars, useViewportMetrics } from "./ui/useViewportMetrics.js";
 
@@ -11,6 +12,7 @@ export default function App() {
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const [screen, setScreen] = useState("menu");
+  const [pauseVisible, setPauseVisible] = useState(false);
   const viewportMetrics = useViewportMetrics();
 
   useEffect(() => {
@@ -27,15 +29,37 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const openSettings = () => setScreen("settings");
-    const openMenu = () => setScreen("menu");
+    const openSettings = () => {
+      setPauseVisible(false);
+      setScreen("settings");
+    };
+    const openMenu = () => {
+      setPauseVisible(false);
+      setScreen("menu");
+    };
+    const openLevelSelect = () => {
+      setPauseVisible(false);
+      setScreen("level-select");
+    };
+    const openPause = () => {
+      setPauseVisible(true);
+    };
+    const closePause = () => {
+      setPauseVisible(false);
+    };
 
     gameEvents.addEventListener("edgecase:navigate-settings", openSettings);
     gameEvents.addEventListener("edgecase:navigate-menu", openMenu);
+    gameEvents.addEventListener("edgecase:navigate-level-select", openLevelSelect);
+    gameEvents.addEventListener("edgecase:pause-open", openPause);
+    gameEvents.addEventListener("edgecase:pause-close", closePause);
 
     return () => {
       gameEvents.removeEventListener("edgecase:navigate-settings", openSettings);
       gameEvents.removeEventListener("edgecase:navigate-menu", openMenu);
+      gameEvents.removeEventListener("edgecase:navigate-level-select", openLevelSelect);
+      gameEvents.removeEventListener("edgecase:pause-open", openPause);
+      gameEvents.removeEventListener("edgecase:pause-close", closePause);
     };
   }, []);
 
@@ -46,6 +70,7 @@ export default function App() {
   }, [screen]);
 
   const startScene = (sceneName) => {
+    setPauseVisible(false);
     setScreen("game");
     gameRef.current?.scene?.start(sceneName);
   };
@@ -56,6 +81,7 @@ export default function App() {
     const registry = getRegistry();
     registry?.set("selectedLevelId", id);
     registry?.remove("draftLevel");
+    setPauseVisible(false);
     setScreen("game");
     gameRef.current?.scene?.start("GameScene");
   };
@@ -63,6 +89,7 @@ export default function App() {
   const editLevel = (level) => {
     const registry = getRegistry();
     registry?.set("editorDraft", structuredClone(level));
+    setPauseVisible(false);
     setScreen("game");
     gameRef.current?.scene?.start("LevelEditorScene");
   };
@@ -77,6 +104,13 @@ export default function App() {
     }
   };
 
+  const handlePauseAction = (action) => {
+    emitGameEvent("edgecase:pause-action", { action });
+    if (action === "resume") {
+      setPauseVisible(false);
+    }
+  };
+
   return (
     <div className="app-shell" style={getViewportStyleVars(viewportMetrics)}>
       <div
@@ -85,6 +119,7 @@ export default function App() {
         className={screen !== "game" ? "game-layer game-layer--obscured" : "game-layer"}
         aria-hidden={screen !== "game"}
       />
+      {pauseVisible ? <PauseScreen onAction={handlePauseAction} /> : null}
       {screen === "menu" ? (
         <MenuScreen
           onPlay={() => setScreen("level-select")}

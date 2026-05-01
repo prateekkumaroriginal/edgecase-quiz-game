@@ -477,8 +477,8 @@ export const LEVELS = [
     worldHeight: 720,
     floorY: 652,
     playerSpawn: {
-      x: 64,
-      y: 384
+      x: 176,
+      y: 48
     },
     platforms: [
       {
@@ -486,12 +486,6 @@ export const LEVELS = [
         y: 652,
         width: 4300,
         height: 64
-      },
-      {
-        x: 704,
-        y: 320,
-        width: 220,
-        height: 36
       }
     ],
     coins: [],
@@ -500,8 +494,8 @@ export const LEVELS = [
     challenges: [],
     merchant: null,
     exitGate: {
-      x: 208,
-      y: 352,
+      x: 176,
+      y: 304,
       width: 116,
       height: 140
     },
