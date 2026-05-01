@@ -3,11 +3,13 @@ import { createGame } from "./game/createGame.js";
 import { gameEvents } from "./game/gameEvents.js";
 import { MenuScreen } from "./ui/MenuScreen.jsx";
 import { SettingsScreen } from "./ui/SettingsScreen.jsx";
+import { getViewportStyleVars, useViewportMetrics } from "./ui/useViewportMetrics.js";
 
 export default function App() {
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const [screen, setScreen] = useState("menu");
+  const viewportMetrics = useViewportMetrics();
 
   useEffect(() => {
     if (!gameRootRef.current || gameRef.current) {
@@ -47,7 +49,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={getViewportStyleVars(viewportMetrics)}>
       <div
         ref={gameRootRef}
         id="game-root"

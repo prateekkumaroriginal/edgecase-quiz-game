@@ -72,18 +72,18 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
     <section
       ref={screenRef}
       tabIndex={-1}
-      className="absolute inset-0 z-[5] overflow-hidden bg-[radial-gradient(circle_at_27%_42%,rgba(12,69,55,0.18),transparent_28%),linear-gradient(180deg,#010807_0%,#03100e_52%,#010605_100%)] px-[clamp(44px,5vw,70px)] py-[clamp(34px,5vw,60px)] font-['Cascadia_Mono',Consolas,monospace] text-[#edf8ed] outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(73,180,150,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(73,180,150,0.025)_1px,transparent_1px)] before:bg-[size:26px_26px] before:content-[''] before:[mask-image:linear-gradient(90deg,transparent_0%,#000_46%,#000_100%)] max-[900px]:px-6 max-[900px]:py-7"
+      className="menu-screen absolute inset-0 z-[5] overflow-hidden bg-[radial-gradient(circle_at_27%_42%,rgba(12,69,55,0.18),transparent_28%),linear-gradient(180deg,#010807_0%,#03100e_52%,#010605_100%)] font-['Cascadia_Mono',Consolas,monospace] text-[#edf8ed] outline-none before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(73,180,150,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(73,180,150,0.025)_1px,transparent_1px)] before:bg-[size:26px_26px] before:content-[''] before:[mask-image:linear-gradient(90deg,transparent_0%,#000_46%,#000_100%)]"
       aria-label="Main menu"
     >
-      <header className="relative z-[2] flex items-start justify-between gap-8 max-[900px]:items-stretch">
+      <header className="relative z-[2] flex items-start justify-between gap-8">
         <div>
-          <h1 className="m-0 font-[Bungee,EdgecaseTitle,Bahnschrift,Impact,sans-serif] text-[clamp(62px,6.8vw,104px)] font-normal leading-[0.98] tracking-[0] text-[#f3f6e5] [-webkit-text-stroke:0] [text-shadow:none]">
+          <h1 className="page-title">
             WISDOM QUEST
           </h1>
         </div>
       </header>
 
-      <div className="relative z-[2] mt-[72px] ml-[42px] grid w-[min(1220px,calc(100vw-224px))] gap-5 max-[900px]:ml-0 max-[900px]:w-full">
+      <div className="menu-action-list relative z-[2] grid">
         {actions.map((item, index) => {
           const Icon = item.icon;
           const focused = focusedRow === index;
@@ -92,7 +92,7 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
             <article
               key={item.label}
               className={cx(
-                "relative grid min-h-[140px] cursor-pointer grid-cols-[126px_minmax(360px,1fr)] items-center rounded-lg border-[3px] py-[22px] pr-12 pl-14 before:pointer-events-none before:absolute before:inset-[-6px] before:rounded-[10px] before:border before:border-transparent before:content-[''] max-[900px]:grid-cols-[70px_1fr] max-[900px]:gap-x-[18px] max-[900px]:gap-y-3",
+                "menu-action-row relative grid cursor-pointer items-center rounded-lg border-[3px] before:pointer-events-none before:absolute before:inset-[-6px] before:rounded-[10px] before:border before:border-transparent before:content-['']",
                 focused
                   ? "border-[#d6b548] bg-[rgba(25,48,31,0.94)] shadow-[inset_0_0_24px_rgba(184,143,38,0.12),0_0_4px_rgba(235,199,76,0.76),0_0_10px_rgba(226,170,46,0.54),0_0_22px_rgba(184,132,32,0.34),0_0_38px_rgba(116,78,18,0.18)]"
                   : "border-[rgba(36,86,74,0.86)] bg-[rgba(3,33,27,0.68)] shadow-[inset_0_0_18px_rgba(18,82,65,0.18),0_0_14px_rgba(15,77,61,0.14)]"

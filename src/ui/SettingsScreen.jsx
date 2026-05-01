@@ -158,7 +158,7 @@ export function SettingsScreen({ onBack }) {
     <section ref={screenRef} tabIndex={-1} className="settings-screen" aria-label="Settings">
       <header className="settings-header">
         <div>
-          <h1>SETTINGS</h1>
+          <h1 className="page-title">SETTINGS</h1>
           <p>SYSTEM / DISPLAY / AUDIO</p>
         </div>
         <button type="button" className="settings-back" onClick={onBack}>
