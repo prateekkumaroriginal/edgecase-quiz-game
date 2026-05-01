@@ -169,7 +169,6 @@ export class LevelEditorScene extends Phaser.Scene {
       del: Phaser.Input.Keyboard.KeyCodes.DELETE,
       d: Phaser.Input.Keyboard.KeyCodes.D,
       c: Phaser.Input.Keyboard.KeyCodes.C,
-      p: Phaser.Input.Keyboard.KeyCodes.P,
       ctrl: Phaser.Input.Keyboard.KeyCodes.CTRL,
       shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
       alt: Phaser.Input.Keyboard.KeyCodes.ALT,
@@ -418,8 +417,6 @@ export class LevelEditorScene extends Phaser.Scene {
       this.duplicateSelected();
     } else if (Phaser.Input.Keyboard.JustDown(this.keys.c)) {
       this.copyLevelData("Copied level data");
-    } else if (Phaser.Input.Keyboard.JustDown(this.keys.p)) {
-      this.playtest();
     }
   }
 

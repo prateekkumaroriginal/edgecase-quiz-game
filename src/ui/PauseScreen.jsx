@@ -44,12 +44,6 @@ export function PauseScreen({ onAction }) {
       } else if (event.code === "Escape") {
         event.preventDefault();
         selectAction("resume");
-      } else if (event.code === "KeyR") {
-        event.preventDefault();
-        selectAction("restart");
-      } else if (event.code === "KeyM") {
-        event.preventDefault();
-        selectAction("menu");
       }
     }
 
