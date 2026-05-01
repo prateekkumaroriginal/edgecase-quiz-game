@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createGame } from "./game/createGame.js";
 import { gameEvents } from "./game/gameEvents.js";
+import { MenuScreen } from "./ui/MenuScreen.jsx";
 import { SettingsScreen } from "./ui/SettingsScreen.jsx";
 
 export default function App() {
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
-  const [screen, setScreen] = useState("game");
+  const [screen, setScreen] = useState("menu");
 
   useEffect(() => {
     if (!gameRootRef.current || gameRef.current) {
@@ -23,32 +24,44 @@ export default function App() {
 
   useEffect(() => {
     const openSettings = () => setScreen("settings");
-    const showGame = () => setScreen("game");
+    const openMenu = () => setScreen("menu");
 
     gameEvents.addEventListener("edgecase:navigate-settings", openSettings);
-    gameEvents.addEventListener("edgecase:navigate-menu", showGame);
+    gameEvents.addEventListener("edgecase:navigate-menu", openMenu);
 
     return () => {
       gameEvents.removeEventListener("edgecase:navigate-settings", openSettings);
-      gameEvents.removeEventListener("edgecase:navigate-menu", showGame);
+      gameEvents.removeEventListener("edgecase:navigate-menu", openMenu);
     };
   }, []);
 
   useEffect(() => {
     if (gameRef.current?.input?.keyboard) {
-      gameRef.current.input.keyboard.enabled = screen !== "settings";
+      gameRef.current.input.keyboard.enabled = screen === "game";
     }
   }, [screen]);
+
+  const startScene = (sceneName) => {
+    setScreen("game");
+    gameRef.current?.scene?.start(sceneName);
+  };
 
   return (
     <div className="app-shell">
       <div
         ref={gameRootRef}
         id="game-root"
-        className={screen === "settings" ? "game-layer game-layer--obscured" : "game-layer"}
-        aria-hidden={screen === "settings"}
+        className={screen !== "game" ? "game-layer game-layer--obscured" : "game-layer"}
+        aria-hidden={screen !== "game"}
       />
-      {screen === "settings" ? <SettingsScreen onBack={() => setScreen("game")} /> : null}
+      {screen === "menu" ? (
+        <MenuScreen
+          onPlay={() => startScene("LevelSelectScene")}
+          onSettings={() => setScreen("settings")}
+          onLevelMaker={() => startScene("LevelEditorScene")}
+        />
+      ) : null}
+      {screen === "settings" ? <SettingsScreen onBack={() => setScreen("menu")} /> : null}
     </div>
   );
 }

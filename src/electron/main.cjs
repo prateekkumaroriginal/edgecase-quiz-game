@@ -194,7 +194,7 @@ function createWindow(options = {}) {
     minWidth: 960,
     minHeight: 540,
     backgroundColor: "#07100f",
-    title: "Edgecase",
+    title: "Wisdom Quest",
     autoHideMenuBar: true,
     frame: !borderless,
     webPreferences: {

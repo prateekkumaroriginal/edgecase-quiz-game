@@ -1,5 +1,5 @@
 {
-  "name": "edgecase-mcq-platformer",
+  "name": "wisdom-quest",
   "version": "0.1.3",
   "author": "Prateek",
   "description": "A desktop MCQ platformer MVP for Steam-oriented PC publishing.",
@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.edgecase.mcqplatformer",
-    "productName": "Edgecase",
+    "productName": "Wisdom Quest",
     "directories": {
       "output": "release"
     },

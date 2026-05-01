@@ -1,6 +1,6 @@
-# Edgecase
+# Wisdom Quest
 
-Edgecase is a desktop MCQ platformer MVP built with Electron and Phaser. It targets a PC release path, with Windows packaging included through Electron Builder.
+Wisdom Quest is a desktop MCQ platformer MVP built with Electron and Phaser. It targets a PC release path, with Windows packaging included through Electron Builder.
 
 ## Play Locally
 
