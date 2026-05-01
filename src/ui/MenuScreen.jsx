@@ -1,33 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Hammer, Play, Settings } from "lucide-react";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
+function cx(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
 export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
   const [focusedRow, setFocusedRow] = useState(0);
-  const actions = [
-    {
-      label: "PLAY",
-      detail: "Choose a level and begin the run",
-      icon: Play,
-      action: onPlay
-    },
-    {
-      label: "SETTINGS",
-      detail: "Adjust system, display, and audio",
-      icon: Settings,
-      action: onSettings
-    }
-  ];
+  const actions = useMemo(() => {
+    const items = [
+      {
+        label: "PLAY",
+        detail: "Choose a level and begin the run",
+        icon: Play,
+        action: onPlay
+      },
+      {
+        label: "SETTINGS",
+        detail: "Adjust system, display, and audio",
+        icon: Settings,
+        action: onSettings
+      }
+    ];
 
-  if (IS_DEV) {
-    actions.push({
-      label: "LEVEL MAKER",
-      detail: "Build and tune local challenge maps",
-      icon: Hammer,
-      action: onLevelMaker
-    });
-  }
+    if (IS_DEV) {
+      items.push({
+        label: "LEVEL MAKER",
+        detail: "Build and tune local challenge maps",
+        icon: Hammer,
+        action: onLevelMaker
+      });
+    }
+
+    return items;
+  }, [onLevelMaker, onPlay, onSettings]);
 
   const selectFocused = useCallback(() => {
     actions[focusedRow]?.action();
@@ -56,14 +64,19 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
   }, [actions.length, selectFocused]);
 
   return (
-    <section className="settings-screen" aria-label="Main menu">
-      <header className="settings-header">
+    <section
+      className="absolute inset-0 z-[5] overflow-hidden bg-[radial-gradient(circle_at_27%_42%,rgba(12,69,55,0.18),transparent_28%),linear-gradient(180deg,#010807_0%,#03100e_52%,#010605_100%)] px-[clamp(44px,5vw,70px)] py-[clamp(34px,5vw,60px)] font-['Cascadia_Mono',Consolas,monospace] text-[#edf8ed] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(73,180,150,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(73,180,150,0.025)_1px,transparent_1px)] before:bg-[size:26px_26px] before:content-[''] before:[mask-image:linear-gradient(90deg,transparent_0%,#000_46%,#000_100%)] max-[900px]:px-6 max-[900px]:py-7"
+      aria-label="Main menu"
+    >
+      <header className="relative z-[2] flex items-start justify-between gap-8 max-[900px]:items-stretch">
         <div>
-          <h1>WISDOM QUEST</h1>
+          <h1 className="m-0 font-[Bungee,EdgecaseTitle,Bahnschrift,Impact,sans-serif] text-[clamp(62px,6.8vw,104px)] font-normal leading-[0.98] tracking-[0] text-[#f3f6e5] [-webkit-text-stroke:0] [text-shadow:none]">
+            WISDOM QUEST
+          </h1>
         </div>
       </header>
 
-      <div className="settings-panel-list menu-panel-list">
+      <div className="relative z-[2] mt-[72px] ml-[42px] grid w-[min(1220px,calc(100vw-224px))] gap-5 max-[900px]:ml-0 max-[900px]:w-full">
         {actions.map((item, index) => {
           const Icon = item.icon;
           const focused = focusedRow === index;
@@ -71,23 +84,45 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
           return (
             <article
               key={item.label}
-              className={`settings-row settings-row--window menu-row ${focused ? "settings-row--focused" : ""}`}
+              className={cx(
+                "relative grid min-h-[140px] cursor-pointer grid-cols-[126px_minmax(360px,1fr)] items-center rounded-lg border-[3px] py-[22px] pr-12 pl-14 before:pointer-events-none before:absolute before:inset-[-6px] before:rounded-[10px] before:border before:border-transparent before:content-[''] max-[900px]:grid-cols-[70px_1fr] max-[900px]:gap-x-[18px] max-[900px]:gap-y-3",
+                focused
+                  ? "border-[#d6b548] bg-[rgba(25,48,31,0.94)] shadow-[inset_0_0_24px_rgba(184,143,38,0.12),0_0_4px_rgba(235,199,76,0.76),0_0_10px_rgba(226,170,46,0.54),0_0_22px_rgba(184,132,32,0.34),0_0_38px_rgba(116,78,18,0.18)]"
+                  : "border-[rgba(36,86,74,0.86)] bg-[rgba(3,33,27,0.68)] shadow-[inset_0_0_18px_rgba(18,82,65,0.18),0_0_14px_rgba(15,77,61,0.14)]"
+              )}
               onMouseEnter={() => setFocusedRow(index)}
               onClick={item.action}
             >
-              <div className="settings-icon" aria-hidden="true">
-                <Icon strokeWidth={3.6} />
+              <div
+                className={cx(
+                  "justify-self-start",
+                  focused
+                    ? "text-[#d7bd4e] [filter:drop-shadow(0_0_9px_rgba(193,151,42,0.5))]"
+                    : "text-[#3fa68f] [filter:drop-shadow(0_0_8px_rgba(63,166,143,0.35))]"
+                )}
+                aria-hidden="true"
+              >
+                <Icon className="h-[58px] w-[58px] stroke-current" strokeWidth={3.6} />
               </div>
-              <div className="settings-row__copy">
-                <h2>{item.label}</h2>
-                <p>{item.detail}</p>
+              <div>
+                <h2
+                  className={cx(
+                    "m-0 mb-4 font-[Bungee,EdgecaseTitle,Bahnschrift,Impact,sans-serif] text-[30px] leading-none font-normal",
+                    focused ? "text-[#d7bd4e]" : "text-[#f2f6e7]"
+                  )}
+                >
+                  {item.label}
+                </h2>
+                <p className="m-0 text-base font-bold text-[#9eaaa1]">{item.detail}</p>
               </div>
             </article>
           );
         })}
       </div>
 
-      <div className="settings-status">A/D move | Space jump | E interact | Physical quiz answers use doors</div>
+      <div className="absolute bottom-7 left-1/2 z-[3] min-h-6 -translate-x-1/2 font-['Cascadia_Mono',Consolas,monospace] text-base font-extrabold text-[#f4e786]">
+        A/D move | Space jump | E interact | Physical quiz answers use doors
+      </div>
     </section>
   );
 }
