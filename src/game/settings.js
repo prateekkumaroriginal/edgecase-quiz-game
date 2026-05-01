@@ -2,6 +2,10 @@ const SOUND_KEY = "edgecase:soundEnabled";
 const BORDERLESS_KEY = "edgecase:borderless";
 const SOUND_VOLUME_KEY = "edgecase:soundVolume";
 const MUSIC_VOLUME_KEY = "edgecase:musicVolume";
+const EDITOR_ZOOM_HUD_VISIBLE_KEY = "edgecase:editorZoomHudVisible";
+const EDITOR_GRID_VISIBLE_KEY = "edgecase:editorGridVisible";
+const EDITOR_COORDINATES_VISIBLE_KEY = "edgecase:editorCoordinatesVisible";
+const EDITOR_DISPLAY_SETTINGS_OPEN_KEY = "edgecase:editorDisplaySettingsOpen";
 
 function clamp01(value, fallback) {
   const number = Number(value);
@@ -87,4 +91,40 @@ export function getBorderlessEnabled() {
 export function setBorderlessEnabled(enabled) {
   writeBoolean(BORDERLESS_KEY, enabled);
   return Boolean(enabled);
+}
+
+export function getEditorZoomHudVisible() {
+  return readBoolean(EDITOR_ZOOM_HUD_VISIBLE_KEY, true);
+}
+
+export function setEditorZoomHudVisible(visible) {
+  writeBoolean(EDITOR_ZOOM_HUD_VISIBLE_KEY, visible);
+  return Boolean(visible);
+}
+
+export function getEditorGridVisible() {
+  return readBoolean(EDITOR_GRID_VISIBLE_KEY, true);
+}
+
+export function setEditorGridVisible(visible) {
+  writeBoolean(EDITOR_GRID_VISIBLE_KEY, visible);
+  return Boolean(visible);
+}
+
+export function getEditorCoordinatesVisible() {
+  return readBoolean(EDITOR_COORDINATES_VISIBLE_KEY, true);
+}
+
+export function setEditorCoordinatesVisible(visible) {
+  writeBoolean(EDITOR_COORDINATES_VISIBLE_KEY, visible);
+  return Boolean(visible);
+}
+
+export function getEditorDisplaySettingsOpen() {
+  return readBoolean(EDITOR_DISPLAY_SETTINGS_OPEN_KEY, true);
+}
+
+export function setEditorDisplaySettingsOpen(open) {
+  writeBoolean(EDITOR_DISPLAY_SETTINGS_OPEN_KEY, open);
+  return Boolean(open);
 }

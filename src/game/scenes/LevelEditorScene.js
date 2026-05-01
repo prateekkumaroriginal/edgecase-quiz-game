@@ -1,5 +1,15 @@
 import { Group, Redo2, Trash2, Undo2, Ungroup } from "lucide";
 import { LEVELS } from "../data/levels.js";
+import {
+  getEditorCoordinatesVisible,
+  getEditorDisplaySettingsOpen,
+  getEditorGridVisible,
+  getEditorZoomHudVisible,
+  setEditorCoordinatesVisible,
+  setEditorDisplaySettingsOpen,
+  setEditorGridVisible,
+  setEditorZoomHudVisible
+} from "../settings.js";
 
 const TOOL_DEFS = [
   { id: "platform", label: "Platform" },
@@ -100,6 +110,10 @@ export class LevelEditorScene extends Phaser.Scene {
     this.selectionOverlay = null;
     this.nudgeRepeat = { signature: "", startedAt: 0, lastAt: 0 };
     this.hudVisible = true;
+    this.zoomHudVisible = getEditorZoomHudVisible();
+    this.gridVisible = getEditorGridVisible();
+    this.coordinatesVisible = getEditorCoordinatesVisible();
+    this.displaySettingsOpen = getEditorDisplaySettingsOpen();
     this.gridSize = DEFAULT_GRID_SIZE;
     this.snapEnabled = true;
     this.cursorWorldPoint = null;
@@ -217,6 +231,26 @@ export class LevelEditorScene extends Phaser.Scene {
         </div>
         <div class="mt-2 text-xs text-[#8fa89d]">Dead canvas expands on drop</div>
         <div data-tools class="mt-5 flex flex-col gap-2"></div>
+        <section class="mt-auto rounded-sm border border-[#385346] bg-[#0d1a16]">
+          <button data-display-settings-toggle type="button" aria-expanded="true" class="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-bold text-[#f4e786] transition-colors hover:bg-[#102019]">
+            <span>DISPLAY</span>
+            <span data-display-settings-indicator class="text-[#8fa89d]">-</span>
+          </button>
+          <div data-display-settings-panel class="border-t border-[#385346] p-2">
+            <button data-display-toggle="zoom" type="button" aria-pressed="true" class="mb-2 flex w-full items-center justify-between rounded-sm border px-3 py-2 text-xs font-bold transition-colors">
+              <span>ZOOM</span>
+              <span data-display-toggle-state="zoom">ON</span>
+            </button>
+            <button data-display-toggle="grid" type="button" aria-pressed="true" class="mb-2 flex w-full items-center justify-between rounded-sm border px-3 py-2 text-xs font-bold transition-colors">
+              <span>GRID</span>
+              <span data-display-toggle-state="grid">ON</span>
+            </button>
+            <button data-display-toggle="coordinates" type="button" aria-pressed="true" class="flex w-full items-center justify-between rounded-sm border px-3 py-2 text-xs font-bold transition-colors">
+              <span>COORDS</span>
+              <span data-display-toggle-state="coordinates">ON</span>
+            </button>
+          </div>
+        </section>
       </aside>
       <aside data-right-panel class="pointer-events-auto absolute right-0 top-0 flex h-full w-[245px] flex-col border-l border-[#385346] bg-[#06100e]/95 p-4 shadow-[-18px_0_36px_rgba(0,0,0,0.35)]">
         <div class="font-[EdgecaseTitle] text-3xl text-[#e7d66b]">SELECTED</div>
@@ -254,10 +288,25 @@ export class LevelEditorScene extends Phaser.Scene {
     this.inspectorEl = this.hudRoot.querySelector("[data-inspector]");
     this.messageEl = this.hudRoot.querySelector("[data-message]");
     this.statusEl = this.hudRoot.querySelector("[data-save-status]");
+    this.zoomControlEl = this.hudRoot.querySelector("[data-zoom-control]");
+    this.gridControlEl = this.hudRoot.querySelector("[data-grid-control]");
     this.zoomIndicatorEl = this.hudRoot.querySelector("[data-zoom-indicator]");
     this.snapToggleEl = this.hudRoot.querySelector("[data-snap-toggle]");
     this.snapModifierEl = this.hudRoot.querySelector("[data-snap-modifier]");
     this.cursorCoordsEl = this.hudRoot.querySelector("[data-cursor-coords]");
+    this.displaySettingsToggleEl = this.hudRoot.querySelector("[data-display-settings-toggle]");
+    this.displaySettingsIndicatorEl = this.hudRoot.querySelector("[data-display-settings-indicator]");
+    this.displaySettingsPanelEl = this.hudRoot.querySelector("[data-display-settings-panel]");
+    this.displayToggleEls = {
+      zoom: this.hudRoot.querySelector("[data-display-toggle='zoom']"),
+      grid: this.hudRoot.querySelector("[data-display-toggle='grid']"),
+      coordinates: this.hudRoot.querySelector("[data-display-toggle='coordinates']")
+    };
+    this.displayToggleStateEls = {
+      zoom: this.hudRoot.querySelector("[data-display-toggle-state='zoom']"),
+      grid: this.hudRoot.querySelector("[data-display-toggle-state='grid']"),
+      coordinates: this.hudRoot.querySelector("[data-display-toggle-state='coordinates']")
+    };
     this.worldWidthInputEl = this.hudRoot.querySelector("[data-world-width]");
     this.worldHeightInputEl = this.hudRoot.querySelector("[data-world-height]");
     this.nameInputEl = this.hudRoot.querySelector("[data-level-name]");
@@ -278,6 +327,23 @@ export class LevelEditorScene extends Phaser.Scene {
     this.hudRoot.querySelector("[data-zoom-out]").addEventListener("click", () => this.adjustCanvasZoom(-ZOOM_STEP));
     this.hudRoot.querySelector("[data-zoom-in]").addEventListener("click", () => this.adjustCanvasZoom(ZOOM_STEP));
     this.zoomIndicatorEl.addEventListener("click", () => this.resetCanvasZoom());
+    this.displaySettingsToggleEl.addEventListener("click", () => {
+      this.displaySettingsOpen = setEditorDisplaySettingsOpen(!this.displaySettingsOpen);
+      this.updateDisplaySettingsControls();
+    });
+    this.displayToggleEls.zoom.addEventListener("click", () => {
+      this.zoomHudVisible = setEditorZoomHudVisible(!this.zoomHudVisible);
+      this.updateDisplaySettingsControls();
+    });
+    this.displayToggleEls.grid.addEventListener("click", () => {
+      this.gridVisible = setEditorGridVisible(!this.gridVisible);
+      this.updateDisplaySettingsControls();
+    });
+    this.displayToggleEls.coordinates.addEventListener("click", () => {
+      this.coordinatesVisible = setEditorCoordinatesVisible(!this.coordinatesVisible);
+      this.updateCursorCoordinates();
+      this.updateDisplaySettingsControls();
+    });
     this.snapToggleEl.addEventListener("click", () => {
       this.snapEnabled = !this.snapEnabled;
       this.updateGridControls();
@@ -320,6 +386,7 @@ export class LevelEditorScene extends Phaser.Scene {
     this.updateZoomIndicator();
     this.updateGridControls();
     this.updateCursorCoordinates();
+    this.updateDisplaySettingsControls();
   }
 
   update(time) {
@@ -1862,6 +1929,7 @@ export class LevelEditorScene extends Phaser.Scene {
   toggleHud() {
     this.hudVisible = !this.hudVisible;
     this.hudRoot.classList.toggle("hidden", !this.hudVisible);
+    this.updateDisplaySettingsControls();
     this.resizeWorldViewport();
   }
 
@@ -1926,15 +1994,56 @@ export class LevelEditorScene extends Phaser.Scene {
     });
   }
 
+  updateDisplaySettingsControls() {
+    this.zoomControlEl?.classList.toggle("hidden", !this.hudVisible || !this.zoomHudVisible);
+    this.gridControlEl?.classList.toggle("hidden", !this.hudVisible || !this.gridVisible);
+    this.cursorCoordsEl?.classList.toggle("hidden", !this.hudVisible || !this.coordinatesVisible);
+
+    if (this.displaySettingsToggleEl) {
+      this.displaySettingsToggleEl.setAttribute("aria-expanded", String(this.displaySettingsOpen));
+    }
+    this.displaySettingsPanelEl?.classList.toggle("hidden", !this.displaySettingsOpen);
+    if (this.displaySettingsIndicatorEl) {
+      this.displaySettingsIndicatorEl.textContent = this.displaySettingsOpen ? "-" : "+";
+    }
+
+    this.updateDisplayToggle("zoom", this.zoomHudVisible);
+    this.updateDisplayToggle("grid", this.gridVisible);
+    this.updateDisplayToggle("coordinates", this.coordinatesVisible);
+  }
+
+  updateDisplayToggle(key, active) {
+    const button = this.displayToggleEls?.[key];
+    const state = this.displayToggleStateEls?.[key];
+    if (!button || !state) return;
+
+    button.setAttribute("aria-pressed", String(active));
+    button.className = [
+      key === "coordinates" ? "" : "mb-2",
+      "flex w-full items-center justify-between rounded-sm border px-3 py-2 text-xs font-bold transition-colors",
+      active
+        ? "border-[#6ad8b4] bg-[#17231d] text-[#f4e786] hover:bg-[#21372e]"
+        : "border-[#7b332d] bg-[#1f1110] text-[#f07b6e] hover:bg-[#2a1715]"
+    ].filter(Boolean).join(" ");
+    state.textContent = active ? "ON" : "OFF";
+  }
+
   updateCursorCoordinates() {
     if (!this.cursorCoordsEl) return;
+    this.cursorCoordsEl.classList.toggle("hidden", !this.hudVisible || !this.coordinatesVisible);
     if (!this.cursorWorldPoint) {
       this.cursorCoordsEl.textContent = "X: ---- Y: ----";
-      this.cursorCoordsEl.className = "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8fa89d] shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
+      this.cursorCoordsEl.className = [
+        "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#385346] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8fa89d] shadow-[0_8px_24px_rgba(0,0,0,0.3)]",
+        (!this.hudVisible || !this.coordinatesVisible) ? "hidden" : ""
+      ].filter(Boolean).join(" ");
       return;
     }
     this.cursorCoordsEl.textContent = `X: ${Math.round(this.cursorWorldPoint.x)} Y: ${Math.round(this.cursorWorldPoint.y)}`;
-    this.cursorCoordsEl.className = "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#6ad8b4] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8ee0c6] shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
+    this.cursorCoordsEl.className = [
+      "pointer-events-none absolute bottom-3 left-1/2 min-w-40 -translate-x-1/2 rounded-sm border border-[#6ad8b4] bg-[#06100e]/90 px-3 py-2 text-center text-xs font-bold text-[#8ee0c6] shadow-[0_8px_24px_rgba(0,0,0,0.3)]",
+      (!this.hudVisible || !this.coordinatesVisible) ? "hidden" : ""
+    ].filter(Boolean).join(" ");
   }
 
   updateToolButtons() {
