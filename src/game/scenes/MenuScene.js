@@ -1,4 +1,5 @@
 import { DEFAULT_LEVEL_ID } from "../data/levels.js";
+import { emitGameEvent } from "../gameEvents.js";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
@@ -60,7 +61,7 @@ export class MenuScene extends Phaser.Scene {
   createMenuButtons() {
     const actions = [
       { label: "PLAY", y: 318, action: () => this.scene.start("LevelSelectScene") },
-      { label: "SETTINGS", y: 404, action: () => this.scene.start("SettingsScene") }
+      { label: "SETTINGS", y: 404, action: () => emitGameEvent("edgecase:navigate-settings") }
     ];
 
     if (IS_DEV) {
