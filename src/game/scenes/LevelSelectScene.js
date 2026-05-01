@@ -327,8 +327,8 @@ export class LevelSelectScene extends Phaser.Scene {
   async deleteLevel(id) {
     const level = this.levels.find((item) => item.id === id);
     if (!level || !window.edgecase?.deleteLevel) return;
-    if (id === DEFAULT_LEVEL_ID) {
-      this.showStatus("The default level cannot be deleted.");
+    if (this.levels.length <= 1) {
+      this.showStatus("At least one level is required.");
       return;
     }
     if (!window.confirm(`Delete level "${level.name}"? This cannot be undone.`)) {

@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import { MenuScene } from "./scenes/MenuScene.js";
-import { LevelSelectScene } from "./scenes/LevelSelectScene.js";
 import { GameScene } from "./scenes/GameScene.js";
 import { LevelEditorScene } from "./scenes/LevelEditorScene.js";
 import { getBorderlessEnabled } from "./settings.js";
@@ -34,8 +33,8 @@ export function createGame(parent) {
       roundPixels: true
     },
     scene: isDev
-      ? [MenuScene, LevelSelectScene, GameScene, LevelEditorScene]
-      : [MenuScene, LevelSelectScene, GameScene]
+      ? [MenuScene, GameScene, LevelEditorScene]
+      : [MenuScene, GameScene]
   };
 
   installGlobalAudioUnlock();

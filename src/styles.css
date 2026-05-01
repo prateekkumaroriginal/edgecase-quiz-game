@@ -216,6 +216,102 @@ canvas {
   color: #d7bd4e;
 }
 
+.level-select-screen {
+  padding: var(--safe-pad-y) var(--safe-pad-x);
+}
+
+.level-select-subtitle {
+  margin: var(--settings-subtitle-margin-top) 0 0;
+  color: #e5d46e;
+  font-family: Bungee, EdgecaseTitle, Bahnschrift, Impact, sans-serif;
+  font-size: var(--settings-subtitle-size);
+  line-height: 1;
+  font-weight: 400;
+}
+
+.level-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  gap: var(--panel-gap);
+  width: var(--safe-content-width);
+  max-height: min(500px, calc(100% - var(--safe-pad-y) - 170px));
+  margin-top: var(--settings-list-margin-top);
+  margin-left: var(--settings-list-margin-left);
+  overflow-y: hidden;
+  scrollbar-color: #d6b548 rgba(3, 33, 27, 0.68);
+}
+
+.level-card-grid--scrollable {
+  overflow-y: auto;
+}
+
+.level-card {
+  min-height: var(--panel-row-height);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  padding: 76px var(--settings-row-pad-x) var(--settings-row-pad-y) var(--settings-row-pad-left);
+}
+
+.level-card-number {
+  position: absolute;
+  top: 26px;
+  left: var(--settings-row-pad-left);
+}
+
+.level-card h2 {
+  font-size: var(--settings-row-heading-size);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.level-card p {
+  font-size: var(--settings-row-copy-size);
+}
+
+.level-card-actions {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  min-width: 94px;
+}
+
+.level-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(36, 86, 74, 0.86);
+  border-radius: 8px;
+  background: rgba(3, 33, 27, 0.78);
+  color: #3fa68f;
+  cursor: pointer;
+}
+
+.level-icon-button:hover,
+.level-icon-button:focus-visible {
+  border-color: #d6b548;
+  color: #d7bd4e;
+  outline: 0;
+}
+
+.level-icon-button:disabled {
+  opacity: 0.36;
+  cursor: default;
+}
+
+.level-icon-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.level-icon-button--danger {
+  color: #d65f4f;
+}
+
 .settings-panel-list {
   position: relative;
   z-index: 2;
@@ -441,6 +537,11 @@ canvas {
 
   .settings-panel-list {
     margin-left: 0;
+  }
+
+  .level-card-grid {
+    margin-left: 0;
+    grid-template-columns: 1fr;
   }
 
   .settings-row,

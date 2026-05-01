@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createGame } from "./game/createGame.js";
+import { DEFAULT_LEVEL_ID } from "./game/data/levels.js";
 import { gameEvents } from "./game/gameEvents.js";
+import { LevelSelectScreen } from "./ui/LevelSelectScreen.jsx";
 import { MenuScreen } from "./ui/MenuScreen.jsx";
 import { SettingsScreen } from "./ui/SettingsScreen.jsx";
 import { getViewportStyleVars, useViewportMetrics } from "./ui/useViewportMetrics.js";
@@ -48,6 +50,33 @@ export default function App() {
     gameRef.current?.scene?.start(sceneName);
   };
 
+  const getRegistry = () => gameRef.current?.registry;
+
+  const playLevel = (id) => {
+    const registry = getRegistry();
+    registry?.set("selectedLevelId", id);
+    registry?.remove("draftLevel");
+    setScreen("game");
+    gameRef.current?.scene?.start("GameScene");
+  };
+
+  const editLevel = (level) => {
+    const registry = getRegistry();
+    registry?.set("editorDraft", structuredClone(level));
+    setScreen("game");
+    gameRef.current?.scene?.start("LevelEditorScene");
+  };
+
+  const syncDevLevels = (levels, loaded = true) => {
+    const registry = getRegistry();
+    registry?.set("devSavedLevels", levels);
+    registry?.set("devSavedLevelsLoaded", loaded);
+    const selectedLevelId = registry?.get("selectedLevelId");
+    if (!levels.some((level) => level.id === selectedLevelId)) {
+      registry?.set("selectedLevelId", levels[0]?.id || DEFAULT_LEVEL_ID);
+    }
+  };
+
   return (
     <div className="app-shell" style={getViewportStyleVars(viewportMetrics)}>
       <div
@@ -58,9 +87,20 @@ export default function App() {
       />
       {screen === "menu" ? (
         <MenuScreen
-          onPlay={() => startScene("LevelSelectScene")}
+          onPlay={() => setScreen("level-select")}
           onSettings={() => setScreen("settings")}
           onLevelMaker={() => startScene("LevelEditorScene")}
+        />
+      ) : null}
+      {screen === "level-select" ? (
+        <LevelSelectScreen
+          initialDevLevels={getRegistry()?.get("devSavedLevels") || []}
+          initialDevLevelsLoaded={Boolean(getRegistry()?.get("devSavedLevelsLoaded"))}
+          onBack={() => setScreen("menu")}
+          onDeleteLevel={(_id, levels) => syncDevLevels(levels, true)}
+          onEditLevel={editLevel}
+          onLevelsLoaded={syncDevLevels}
+          onPlayLevel={playLevel}
         />
       ) : null}
       {screen === "settings" ? <SettingsScreen onBack={() => setScreen("menu")} /> : null}

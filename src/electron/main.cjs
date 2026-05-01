@@ -29,14 +29,16 @@ function slugifyLevelName(name) {
 function readLevelsSource() {
   const levelsPath = path.join(__dirname, "..", "game", "data", "levels.js");
   const source = fs.readFileSync(levelsPath, "utf8");
-  const match = source.match(/export const LEVELS = ([\s\S]*?);\s*$/);
-  if (!match) {
+  const defaultMatch = source.match(/export const DEFAULT_LEVEL_ID = (["'])(.*?)\1;/);
+  const levelsMatch = source.match(/export const LEVELS = ([\s\S]*?);\s*$/);
+  if (!levelsMatch) {
     throw new Error("Could not find LEVELS export.");
   }
 
   // Dev-only local source parsing for the level authoring tool.
-  const levels = Function(`"use strict"; return (${match[1]});`)();
-  return { levelsPath, levels };
+  const levels = Function(`"use strict"; return (${levelsMatch[1]});`)();
+  const defaultLevelId = defaultMatch?.[2] || levels[0]?.id || "level-1";
+  return { defaultLevelId, levelsPath, levels };
 }
 
 function formatLevelValue(value, indent = 0) {
@@ -57,6 +59,10 @@ function formatLevelValue(value, indent = 0) {
   }
 
   return JSON.stringify(value);
+}
+
+function formatLevelsFile(defaultLevelId, levels) {
+  return `export const DEFAULT_LEVEL_ID = ${JSON.stringify(defaultLevelId)};\n\nexport const LEVELS = ${formatLevelValue(levels)};\n`;
 }
 
 function installDevLevelHandlers() {
@@ -81,7 +87,7 @@ function installDevLevelHandlers() {
       throw new Error("Level name is required.");
     }
 
-    const { levelsPath, levels } = readLevelsSource();
+    const { defaultLevelId, levelsPath, levels } = readLevelsSource();
     const baseId = slugifyLevelName(name);
     const isExistingLevel = level.id && level.id !== "new-level" && levels.some((item) => item.id === String(level.id));
     let id = isExistingLevel || (level.id && level.id !== "new-level") ? String(level.id) : baseId;
@@ -105,8 +111,8 @@ function installDevLevelHandlers() {
       levels.push(savedLevel);
     }
 
-    const file = `export const DEFAULT_LEVEL_ID = "level-1";\n\nexport const LEVELS = ${formatLevelValue(levels)};\n`;
-    fs.writeFileSync(levelsPath, file, "utf8");
+    const nextDefaultLevelId = levels.some((item) => item.id === defaultLevelId) ? defaultLevelId : levels[0]?.id || id;
+    fs.writeFileSync(levelsPath, formatLevelsFile(nextDefaultLevelId, levels), "utf8");
     logLevelStore("save-level completed", { id, name, count: levels.length });
     return { id, name };
   });
@@ -116,21 +122,22 @@ function installDevLevelHandlers() {
     if (!levelId) {
       throw new Error("Level id is required.");
     }
-    if (levelId === "level-1") {
-      throw new Error("The default level cannot be deleted.");
+
+    const { defaultLevelId, levelsPath, levels } = readLevelsSource();
+    if (levels.length <= 1) {
+      throw new Error("At least one level is required.");
     }
 
-    const { levelsPath, levels } = readLevelsSource();
     const existingIndex = levels.findIndex((item) => item.id === levelId);
     if (existingIndex < 0) {
       throw new Error("Level was not found.");
     }
 
     const [deleted] = levels.splice(existingIndex, 1);
-    const file = `export const DEFAULT_LEVEL_ID = "level-1";\n\nexport const LEVELS = ${formatLevelValue(levels)};\n`;
-    fs.writeFileSync(levelsPath, file, "utf8");
-    logLevelStore("delete-level completed", { id: deleted.id, name: deleted.name, count: levels.length });
-    return { id: deleted.id, name: deleted.name };
+    const nextDefaultLevelId = defaultLevelId === deleted.id ? levels[0].id : defaultLevelId;
+    fs.writeFileSync(levelsPath, formatLevelsFile(nextDefaultLevelId, levels), "utf8");
+    logLevelStore("delete-level completed", { id: deleted.id, name: deleted.name, count: levels.length, defaultLevelId: nextDefaultLevelId });
+    return { id: deleted.id, name: deleted.name, defaultLevelId: nextDefaultLevelId };
   });
 }
 
