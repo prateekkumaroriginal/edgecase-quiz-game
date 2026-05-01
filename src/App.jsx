@@ -70,6 +70,11 @@ export default function App() {
   }, [screen]);
 
   const startScene = (sceneName) => {
+    const registry = getRegistry();
+    if (sceneName === "LevelEditorScene") {
+      registry?.remove("editorDraft");
+      registry?.remove("draftLevel");
+    }
     setPauseVisible(false);
     setScreen("game");
     gameRef.current?.scene?.start(sceneName);

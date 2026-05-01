@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const isDev = Boolean(process.env.ELECTRON_START_URL);
 let mainWindow = null;
@@ -17,15 +18,6 @@ function logLevelStore(message, details = {}) {
   console.log("[edgecase:levels]", message, details);
 }
 
-function slugifyLevelName(name) {
-  const slug = String(name)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "level";
-}
-
 function readLevelsSource() {
   const levelsPath = path.join(__dirname, "..", "game", "data", "levels.js");
   const source = fs.readFileSync(levelsPath, "utf8");
@@ -39,6 +31,14 @@ function readLevelsSource() {
   const levels = Function(`"use strict"; return (${levelsMatch[1]});`)();
   const defaultLevelId = defaultMatch?.[2] || levels[0]?.id || "level-1";
   return { defaultLevelId, levelsPath, levels };
+}
+
+function createLevelId(levels) {
+  let id = crypto.randomUUID();
+  while (levels.some((level) => level.id === id)) {
+    id = crypto.randomUUID();
+  }
+  return id;
 }
 
 function formatLevelValue(value, indent = 0) {
@@ -88,23 +88,15 @@ function installDevLevelHandlers() {
     }
 
     const { defaultLevelId, levelsPath, levels } = readLevelsSource();
-    const baseId = slugifyLevelName(name);
-    const isExistingLevel = level.id && level.id !== "new-level" && levels.some((item) => item.id === String(level.id));
-    let id = isExistingLevel || (level.id && level.id !== "new-level") ? String(level.id) : baseId;
-    logLevelStore("save-level requested", { incomingId: level.id, resolvedId: id, name, isExistingLevel });
-    let suffix = 2;
-    while (!isExistingLevel && levels.some((item) => item.id === id && item.name.toLowerCase() !== name.toLowerCase())) {
-      id = `${baseId}-${suffix}`;
-      suffix += 1;
-    }
-
-    const duplicateName = levels.find((item) => item.name.trim().toLowerCase() === name.toLowerCase() && item.id !== id);
-    if (duplicateName) {
-      throw new Error("Level name must be unique.");
-    }
+    const incomingId = String(level.id || "").trim();
+    const existingIndexByIncomingId = incomingId && incomingId !== "new-level"
+      ? levels.findIndex((item) => item.id === incomingId)
+      : -1;
+    const isExistingLevel = existingIndexByIncomingId >= 0;
+    const id = isExistingLevel ? incomingId : createLevelId(levels);
 
     const savedLevel = { ...level, id, name };
-    const existingIndex = levels.findIndex((item) => item.id === id);
+    const existingIndex = isExistingLevel ? existingIndexByIncomingId : -1;
     if (existingIndex >= 0) {
       levels[existingIndex] = savedLevel;
     } else {

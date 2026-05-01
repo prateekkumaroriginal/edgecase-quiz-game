@@ -1627,10 +1627,6 @@ export class LevelEditorScene extends Phaser.Scene {
       this.showMessage("Level name is required.");
       return;
     }
-    if (this.getEditableLevels().some((level) => level.name.trim().toLowerCase() === name.toLowerCase() && level.id !== this.draft.id)) {
-      this.showMessage("Level name must be unique.");
-      return;
-    }
     if (!this.draft.playerSpawn || !this.draft.exitGate) {
       this.showMessage("You must have a Spawn and Exit point before saving.");
       return;
@@ -1642,6 +1638,11 @@ export class LevelEditorScene extends Phaser.Scene {
 
     this.draft.name = name;
     try {
+      const latestLevels = window.edgecase.loadLevels ? await window.edgecase.loadLevels() : this.getEditableLevels();
+      if (Array.isArray(latestLevels)) {
+        this.registry.set("devSavedLevels", latestLevels);
+        this.registry.set("devSavedLevelsLoaded", Boolean(window.edgecase.loadLevels));
+      }
       const saved = await window.edgecase.saveLevel(this.toLevelData());
       this.draft.id = saved.id;
       const levels = window.edgecase.loadLevels ? await window.edgecase.loadLevels() : this.upsertDevSavedLevel(this.toLevelData());

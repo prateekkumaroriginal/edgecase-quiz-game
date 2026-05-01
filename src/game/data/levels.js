@@ -477,8 +477,8 @@ export const LEVELS = [
     worldHeight: 720,
     floorY: 652,
     playerSpawn: {
-      x: 176,
-      y: 48
+      x: 624,
+      y: 448
     },
     platforms: [
       {
@@ -494,11 +494,48 @@ export const LEVELS = [
     challenges: [],
     merchant: null,
     exitGate: {
-      x: 176,
-      y: 304,
+      x: 208,
+      y: 496,
       width: 116,
       height: 140
     },
     signs: []
+  },
+  {
+    id: "de939543-fcff-4ab1-a5dd-9433c3c2a16c",
+    name: "New Level",
+    worldWidth: 4300,
+    worldHeight: 720,
+    floorY: 652,
+    playerSpawn: {
+      x: 112,
+      y: 480
+    },
+    platforms: [
+      {
+        x: 0,
+        y: 652,
+        width: 4300,
+        height: 64
+      }
+    ],
+    coins: [],
+    hazards: [],
+    enemies: [],
+    challenges: [],
+    merchant: null,
+    exitGate: {
+      x: 512,
+      y: 496,
+      width: 116,
+      height: 140
+    },
+    signs: [
+      {
+        x: 192,
+        y: 336,
+        text: "napunsak"
+      }
+    ]
   }
 ];
