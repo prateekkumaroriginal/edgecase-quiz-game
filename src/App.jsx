@@ -2,8 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { createGame } from "./game/createGame.js";
 import { DEFAULT_LEVEL_ID } from "./game/data/levels.js";
 import { emitGameEvent, gameEvents } from "./game/gameEvents.js";
+import { EndRunScreen } from "./ui/EndRunScreen.jsx";
+import { GameplayHud } from "./ui/GameplayHud.jsx";
+import { GameToast } from "./ui/GameToast.jsx";
 import { LevelSelectScreen } from "./ui/LevelSelectScreen.jsx";
 import { MenuScreen } from "./ui/MenuScreen.jsx";
+import { MerchantScreen } from "./ui/MerchantScreen.jsx";
 import { PauseScreen } from "./ui/PauseScreen.jsx";
 import { SettingsScreen } from "./ui/SettingsScreen.jsx";
 import { getViewportStyleVars, useViewportMetrics } from "./ui/useViewportMetrics.js";
@@ -13,6 +17,10 @@ export default function App() {
   const gameRef = useRef(null);
   const [screen, setScreen] = useState("menu");
   const [pauseVisible, setPauseVisible] = useState(false);
+  const [merchantState, setMerchantState] = useState(null);
+  const [endRunState, setEndRunState] = useState(null);
+  const [hudState, setHudState] = useState(null);
+  const [toastState, setToastState] = useState(null);
   const viewportMetrics = useViewportMetrics();
 
   useEffect(() => {
@@ -31,14 +39,21 @@ export default function App() {
   useEffect(() => {
     const openSettings = () => {
       setPauseVisible(false);
+      setMerchantState(null);
+      setEndRunState(null);
       setScreen("settings");
     };
     const openMenu = () => {
       setPauseVisible(false);
+      setMerchantState(null);
+      setEndRunState(null);
+      setHudState(null);
       setScreen("menu");
     };
     const openLevelSelect = () => {
       setPauseVisible(false);
+      setMerchantState(null);
+      setEndRunState(null);
       setScreen("level-select");
     };
     const openPause = () => {
@@ -47,12 +62,27 @@ export default function App() {
     const closePause = () => {
       setPauseVisible(false);
     };
+    const openMerchant = (event) => setMerchantState(event.detail);
+    const closeMerchant = () => setMerchantState(null);
+    const openEndRun = (event) => setEndRunState(event.detail);
+    const closeEndRun = () => setEndRunState(null);
+    const updateHud = (event) => setHudState(event.detail);
+    const clearHud = () => setHudState(null);
+    const showToast = (event) => setToastState({ id: Date.now(), message: event.detail?.message || "" });
 
     gameEvents.addEventListener("edgecase:navigate-settings", openSettings);
     gameEvents.addEventListener("edgecase:navigate-menu", openMenu);
     gameEvents.addEventListener("edgecase:navigate-level-select", openLevelSelect);
     gameEvents.addEventListener("edgecase:pause-open", openPause);
     gameEvents.addEventListener("edgecase:pause-close", closePause);
+    gameEvents.addEventListener("edgecase:merchant-open", openMerchant);
+    gameEvents.addEventListener("edgecase:merchant-update", openMerchant);
+    gameEvents.addEventListener("edgecase:merchant-close", closeMerchant);
+    gameEvents.addEventListener("edgecase:end-run-open", openEndRun);
+    gameEvents.addEventListener("edgecase:end-run-close", closeEndRun);
+    gameEvents.addEventListener("edgecase:hud-update", updateHud);
+    gameEvents.addEventListener("edgecase:hud-clear", clearHud);
+    gameEvents.addEventListener("edgecase:toast", showToast);
 
     return () => {
       gameEvents.removeEventListener("edgecase:navigate-settings", openSettings);
@@ -60,6 +90,14 @@ export default function App() {
       gameEvents.removeEventListener("edgecase:navigate-level-select", openLevelSelect);
       gameEvents.removeEventListener("edgecase:pause-open", openPause);
       gameEvents.removeEventListener("edgecase:pause-close", closePause);
+      gameEvents.removeEventListener("edgecase:merchant-open", openMerchant);
+      gameEvents.removeEventListener("edgecase:merchant-update", openMerchant);
+      gameEvents.removeEventListener("edgecase:merchant-close", closeMerchant);
+      gameEvents.removeEventListener("edgecase:end-run-open", openEndRun);
+      gameEvents.removeEventListener("edgecase:end-run-close", closeEndRun);
+      gameEvents.removeEventListener("edgecase:hud-update", updateHud);
+      gameEvents.removeEventListener("edgecase:hud-clear", clearHud);
+      gameEvents.removeEventListener("edgecase:toast", showToast);
     };
   }, []);
 
@@ -76,6 +114,8 @@ export default function App() {
       registry?.remove("draftLevel");
     }
     setPauseVisible(false);
+    setMerchantState(null);
+    setEndRunState(null);
     setScreen("game");
     gameRef.current?.scene?.start(sceneName);
   };
@@ -87,6 +127,8 @@ export default function App() {
     registry?.set("selectedLevelId", id);
     registry?.remove("draftLevel");
     setPauseVisible(false);
+    setMerchantState(null);
+    setEndRunState(null);
     setScreen("game");
     gameRef.current?.scene?.start("GameScene");
   };
@@ -95,6 +137,8 @@ export default function App() {
     const registry = getRegistry();
     registry?.set("editorDraft", structuredClone(level));
     setPauseVisible(false);
+    setMerchantState(null);
+    setEndRunState(null);
     setScreen("game");
     gameRef.current?.scene?.start("LevelEditorScene");
   };
@@ -116,6 +160,14 @@ export default function App() {
     }
   };
 
+  const handleMerchantAction = (action) => {
+    emitGameEvent("edgecase:merchant-action", action);
+  };
+
+  const handleEndRunAction = (action) => {
+    emitGameEvent("edgecase:end-run-action", { action });
+  };
+
   return (
     <div className="app-shell" style={getViewportStyleVars(viewportMetrics)}>
       <div
@@ -124,6 +176,10 @@ export default function App() {
         className={screen !== "game" ? "game-layer game-layer--obscured" : "game-layer"}
         aria-hidden={screen !== "game"}
       />
+      {screen === "game" ? <GameplayHud hud={hudState} /> : null}
+      {screen === "game" ? <GameToast toast={toastState} /> : null}
+      {merchantState ? <MerchantScreen state={merchantState} onAction={handleMerchantAction} /> : null}
+      {endRunState ? <EndRunScreen state={endRunState} onAction={handleEndRunAction} /> : null}
       {pauseVisible ? <PauseScreen onAction={handlePauseAction} /> : null}
       {screen === "menu" ? (
         <MenuScreen

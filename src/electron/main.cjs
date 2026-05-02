@@ -158,7 +158,13 @@ function installWindowModeHandlers() {
     });
 
     if (shouldEnable === isBorderless && mainWindow) {
-      logWindowMode("set-borderless skipped; already in requested mode", { borderless: isBorderless });
+      if (!mainWindow.isDestroyed() && mainWindow.isFullScreen() !== shouldEnable) {
+        mainWindow.setFullScreen(shouldEnable);
+      }
+      logWindowMode("set-borderless skipped; already in requested mode", {
+        borderless: isBorderless,
+        fullscreen: mainWindow && !mainWindow.isDestroyed() ? mainWindow.isFullScreen() : null
+      });
       return { borderless: isBorderless };
     }
 
@@ -196,6 +202,10 @@ function createWindow(options = {}) {
     title: "Wisdom Quest",
     autoHideMenuBar: true,
     frame: !borderless,
+    fullscreen: borderless,
+    hasShadow: !borderless,
+    roundedCorners: false,
+    thickFrame: !borderless,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -207,6 +217,7 @@ function createWindow(options = {}) {
   logWindowMode("window created", {
     borderless,
     bounds: win.getBounds(),
+    fullscreen: win.isFullScreen(),
     isDev
   });
 
@@ -246,7 +257,7 @@ function recreateWindow(borderless) {
   }
 
   const bounds = borderless
-    ? screen.getDisplayMatching(previousBounds || { x: 0, y: 0, width: 1280, height: 720 }).workArea
+    ? screen.getDisplayMatching(previousBounds || { x: 0, y: 0, width: 1280, height: 720 }).bounds
     : windowedBounds || previousBounds || { width: 1280, height: 720 };
 
   const next = createWindow({ borderless, bounds });

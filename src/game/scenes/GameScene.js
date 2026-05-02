@@ -55,7 +55,6 @@ export class GameScene extends Phaser.Scene {
     this.merchantHoldStartedAt = null;
     this.merchantHoldComplete = false;
     this.merchantHoldDenied = false;
-    this.merchantRequiresSpaceRelease = false;
     this.merchantChargeOsc = null;
     this.merchantChargeGain = null;
     this.musicEvent = null;
@@ -91,15 +90,29 @@ export class GameScene extends Phaser.Scene {
     this.input.once("pointerdown", () => this.ensureAudio());
     this.input.keyboard.once("keydown", () => this.ensureAudio());
     this.pauseActionHandler = (event) => this.executePauseAction(event.detail?.action);
+    this.merchantActionHandler = (event) => this.executeMerchantAction(event.detail);
+    this.endRunActionHandler = (event) => this.executeEndRunAction(event.detail?.action);
     gameEvents.addEventListener("edgecase:pause-action", this.pauseActionHandler);
+    gameEvents.addEventListener("edgecase:merchant-action", this.merchantActionHandler);
+    gameEvents.addEventListener("edgecase:end-run-action", this.endRunActionHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       gameEvents.removeEventListener("edgecase:pause-action", this.pauseActionHandler);
+      gameEvents.removeEventListener("edgecase:merchant-action", this.merchantActionHandler);
+      gameEvents.removeEventListener("edgecase:end-run-action", this.endRunActionHandler);
       this.destroyPauseMenu();
+      this.closeMerchant();
+      emitGameEvent("edgecase:end-run-close");
+      emitGameEvent("edgecase:hud-clear");
       this.stopMusic();
     });
     this.events.once(Phaser.Scenes.Events.DESTROY, () => {
       gameEvents.removeEventListener("edgecase:pause-action", this.pauseActionHandler);
+      gameEvents.removeEventListener("edgecase:merchant-action", this.merchantActionHandler);
+      gameEvents.removeEventListener("edgecase:end-run-action", this.endRunActionHandler);
       this.destroyPauseMenu();
+      this.closeMerchant();
+      emitGameEvent("edgecase:end-run-close");
+      emitGameEvent("edgecase:hud-clear");
       this.stopMusic();
     });
   }
@@ -315,28 +328,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   createHud() {
-    this.hud = this.add.container(0, 0).setScrollFactor(0).setDepth(50);
-    this.hud.add(this.add.rectangle(640, 28, 1280, 56, 0x08100f, 0.88));
-    this.coinIcon = this.add.image(26, 28, "coin").setDisplaySize(24, 24);
-    this.coinText = this.add.text(48, 28, "", this.hudStyle("#e7d66b")).setOrigin(0, 0.5);
-    this.healthText = this.add.text(115, 28, "", this.hudStyle("#d65f4f")).setOrigin(0, 0.5);
-    this.statusText = this.add.text(250, 13, "", this.hudStyle("#edf8ed"));
-    this.promptText = this.add.text(820, 13, "", this.hudStyle("#d9e5d0"));
-    this.hud.add([this.coinIcon, this.coinText, this.healthText, this.statusText, this.promptText]);
-
-    this.toastText = this.add
-      .text(640, 84, "", {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "20px",
-        color: "#07100f",
-        backgroundColor: "#e7d66b",
-        padding: { x: 14, y: 8 }
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(80)
-      .setVisible(false);
-
+    this.lastHudKey = "";
     this.updateHud();
   }
 
@@ -367,12 +359,13 @@ export class GameScene extends Phaser.Scene {
 
     if (this.paused) return;
 
+    if (this.merchantOpen) {
+      this.updateHud();
+      return;
+    }
+
     if (Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
-      if (this.merchantOpen) {
-        this.closeMerchant();
-      } else {
-        this.togglePause();
-      }
+      this.togglePause();
       return;
     }
 
@@ -384,7 +377,6 @@ export class GameScene extends Phaser.Scene {
     this.updateMagnet(delta);
     this.updateQuiz(time);
     this.updateProximity();
-    this.updateMerchantInput(time);
     this.handleInteractions();
     this.updateHud();
   }
@@ -428,6 +420,14 @@ export class GameScene extends Phaser.Scene {
       this.dashReadyAt = time + 1150;
       this.showToast("Dash ready again in 1s");
       this.playTone("dash");
+    }
+  }
+
+  clearGameplayInput(stopHorizontal = true) {
+    this.input.keyboard?.resetKeys?.();
+    if (stopHorizontal && this.player?.body) {
+      this.player.setAccelerationX(0);
+      this.player.setVelocityX(0);
     }
   }
 
@@ -529,6 +529,7 @@ export class GameScene extends Phaser.Scene {
 
     if (this.paused) {
       this.paused = false;
+      this.clearGameplayInput();
       this.physics.resume();
       if (this.quiz) {
         this.quiz.endsAt += this.time.now - this.pauseStartedAt;
@@ -540,7 +541,7 @@ export class GameScene extends Phaser.Scene {
 
     this.paused = true;
     this.pauseStartedAt = this.time.now;
-    this.player.setAccelerationX(0);
+    this.clearGameplayInput();
     this.physics.pause();
     this.createPauseMenu();
     this.playTone("pause");
@@ -563,6 +564,7 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.resume();
     this.paused = false;
+    this.clearGameplayInput();
     this.destroyPauseMenu();
 
     if (action === "restart") {
@@ -815,131 +817,22 @@ export class GameScene extends Phaser.Scene {
     this.merchantSelectedIndex = Phaser.Math.Clamp(this.merchantSelectedIndex, 0, UPGRADES.length - 1);
     this.merchantHoldStartedAt = null;
     this.merchantHoldComplete = false;
+    this.clearGameplayInput();
     this.player.setVelocity(0, 0);
     this.playTone("menu");
-
-    this.merchantUi = this.add.container(0, 0).setScrollFactor(0).setDepth(90);
-    this.merchantUi.add(this.add.rectangle(640, 360, 770, 475, 0x08100f, 0.96).setStrokeStyle(4, 0xe7d66b));
-    this.merchantUi.add(this.add.text(640, 178, "MERCHANT", {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: "46px",
-      color: "#e7d66b"
-    }).setOrigin(0.5));
-    this.merchantUi.add(this.add.text(640, 216, "W/S or arrows select. Hold Space for 1s to buy. Esc closes.", {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "18px",
-      color: "#d9e5d0"
-    }).setOrigin(0.5));
-
-    this.merchantRows = UPGRADES.map((upgrade, index) => {
-      const y = 275 + index * 70;
-      const owned = this.upgrades[upgrade.id];
-      const affordable = this.coins >= upgrade.cost;
-      const color = owned ? 0x274136 : affordable ? 0x22312b : 0x201b18;
-      const row = this.add.rectangle(640, y, 610, 54, color, 1).setStrokeStyle(2, owned ? 0x3fa68f : 0x6f744e);
-      const progressFill = this.add.rectangle(335, y, 0, 54, 0xe7d66b, 0.26).setOrigin(0, 0.5);
-      const title = owned ? `${index + 1}. ${upgrade.name} - OWNED` : `${index + 1}. ${upgrade.name} - ${upgrade.cost}`;
-      const text = this.add.text(360, y - 18, title, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "18px",
-        color: owned ? "#8ee0c6" : "#edf8ed"
-      });
-      const coinIcon = this.add.image(text.x + text.width + 15, y - 8, "coin").setDisplaySize(18, 18);
-      coinIcon.setVisible(!owned);
-      const desc = this.add.text(360, y + 7, upgrade.description, {
-        fontFamily: "Cascadia Mono, Consolas, monospace",
-        fontSize: "13px",
-        color: "#b8c7b5"
-      });
-      row.setInteractive({ useHandCursor: true });
-      row.on("pointerover", () => {
-        this.merchantSelectedIndex = index;
-        this.resetMerchantHold();
-        this.updateMerchantFocus();
-      });
-      row.on("pointerdown", () => {
-        this.merchantSelectedIndex = index;
-        this.updateMerchantFocus();
-      });
-      this.merchantUi.add([row, progressFill, text, coinIcon, desc]);
-      return { upgrade, row, text, coinIcon, desc, progressFill };
-    });
-    this.updateMerchantFocus();
+    this.emitMerchantState("edgecase:merchant-open");
   }
 
   closeMerchant() {
+    if (!this.merchantOpen) {
+      emitGameEvent("edgecase:merchant-close");
+      return;
+    }
+
     this.merchantOpen = false;
+    this.clearGameplayInput();
     this.resetMerchantHold();
-    this.merchantRequiresSpaceRelease = false;
-    this.merchantRows = null;
-    if (this.merchantUi) {
-      this.merchantUi.destroy(true);
-      this.merchantUi = null;
-    }
-  }
-
-  updateMerchantInput(time) {
-    if (!this.merchantOpen || !this.merchantRows) {
-      return;
-    }
-
-    if (this.merchantRequiresSpaceRelease) {
-      if (!this.cursors.space.isDown) {
-        this.merchantRequiresSpaceRelease = false;
-      }
-      return;
-    }
-
-    if (this.menuUpPressed()) {
-      this.merchantSelectedIndex = Phaser.Math.Wrap(this.merchantSelectedIndex - 1, 0, this.merchantRows.length);
-      this.resetMerchantHold();
-      this.updateMerchantFocus();
-      this.playTone("menu");
-    } else if (this.menuDownPressed()) {
-      this.merchantSelectedIndex = Phaser.Math.Wrap(this.merchantSelectedIndex + 1, 0, this.merchantRows.length);
-      this.resetMerchantHold();
-      this.updateMerchantFocus();
-      this.playTone("menu");
-    }
-
-    const selectedRow = this.merchantRows[this.merchantSelectedIndex];
-    if (!selectedRow) {
-      return;
-    }
-
-    if (!this.cursors.space.isDown) {
-      this.resetMerchantHold();
-      return;
-    }
-
-    const owned = this.upgrades[selectedRow.upgrade.id];
-    const affordable = this.coins >= selectedRow.upgrade.cost;
-    if (owned || !affordable) {
-      this.resetMerchantHold();
-      if (Phaser.Input.Keyboard.JustDown(this.cursors.space) && !this.merchantHoldDenied) {
-        this.merchantHoldDenied = true;
-        this.showToast(owned ? "Already owned" : "Not enough coins");
-        this.playTone("deny");
-      }
-      return;
-    }
-
-    if (this.merchantHoldStartedAt === null) {
-      this.merchantHoldStartedAt = time;
-      this.merchantHoldComplete = false;
-      this.merchantHoldDenied = false;
-      this.startMerchantChargeTone();
-    }
-
-    const progress = Phaser.Math.Clamp((time - this.merchantHoldStartedAt) / 1000, 0, 1);
-    selectedRow.progressFill.width = 610 * progress;
-    this.updateMerchantChargeTone(progress);
-
-    if (progress >= 1 && !this.merchantHoldComplete) {
-      this.merchantHoldComplete = true;
-      this.stopMerchantChargeTone();
-      this.buyUpgrade(selectedRow.upgrade);
-    }
+    emitGameEvent("edgecase:merchant-close");
   }
 
   resetMerchantHold() {
@@ -947,31 +840,72 @@ export class GameScene extends Phaser.Scene {
     this.merchantHoldComplete = false;
     this.merchantHoldDenied = false;
     this.stopMerchantChargeTone();
-    if (!this.merchantRows) {
-      return;
-    }
-
-    for (const row of this.merchantRows) {
-      row.progressFill.width = 0;
-    }
   }
 
   updateMerchantFocus() {
-    if (!this.merchantRows) {
+    if (!this.merchantOpen) {
       return;
     }
 
-    this.merchantRows.forEach((item, index) => {
-      const focused = index === this.merchantSelectedIndex;
-      const owned = this.upgrades[item.upgrade.id];
-      const affordable = this.coins >= item.upgrade.cost;
-      item.row.setFillStyle(owned ? 0x274136 : affordable ? 0x22312b : 0x201b18);
-      item.row.setStrokeStyle(focused ? 4 : 2, focused ? 0xf4e786 : owned ? 0x3fa68f : 0x6f744e);
-      item.text.setColor(focused ? "#f4e786" : owned ? "#8ee0c6" : "#edf8ed");
-      item.coinIcon.setVisible(!owned);
-      item.coinIcon.setAlpha(affordable ? 1 : 0.45);
-      item.desc.setColor(affordable || owned ? "#b8c7b5" : "#8d7770");
+    this.emitMerchantState("edgecase:merchant-update");
+  }
+
+  emitMerchantState(type = "edgecase:merchant-update") {
+    emitGameEvent(type, {
+      coins: this.coins,
+      selectedIndex: this.merchantSelectedIndex,
+      upgrades: UPGRADES.map((upgrade) => ({
+        ...upgrade,
+        owned: Boolean(this.upgrades[upgrade.id]),
+        affordable: this.coins >= upgrade.cost
+      }))
     });
+  }
+
+  executeMerchantAction(action) {
+    if (!this.merchantOpen || !action) {
+      return;
+    }
+
+    if (action.type === "close") {
+      this.closeMerchant();
+      return;
+    }
+
+    if (action.type === "select") {
+      this.merchantSelectedIndex = Phaser.Math.Clamp(action.index || 0, 0, UPGRADES.length - 1);
+      this.resetMerchantHold();
+      this.updateMerchantFocus();
+      return;
+    }
+
+    if (action.type === "charge-start") {
+      this.startMerchantChargeTone();
+      return;
+    }
+
+    if (action.type === "charge") {
+      this.updateMerchantChargeTone(Phaser.Math.Clamp(action.progress || 0, 0, 1));
+      return;
+    }
+
+    if (action.type === "charge-stop") {
+      this.stopMerchantChargeTone();
+      return;
+    }
+
+    if (action.type === "deny") {
+      const upgrade = UPGRADES.find((item) => item.id === action.id);
+      this.showToast(this.upgrades[upgrade?.id] ? "Already owned" : "Not enough coins");
+      this.playTone("deny");
+      return;
+    }
+
+    if (action.type === "buy") {
+      const upgrade = UPGRADES.find((item) => item.id === action.id);
+      this.stopMerchantChargeTone();
+      this.buyUpgrade(upgrade);
+    }
   }
 
   startMerchantChargeTone() {
@@ -1050,12 +984,13 @@ export class GameScene extends Phaser.Scene {
     this.playTone("buy");
     this.closeMerchant();
     this.openMerchant();
-    this.merchantRequiresSpaceRelease = true;
   }
 
   endRun(title = "RUN COMPLETE") {
     this.runEnded = true;
     this.merchantOpen = false;
+    emitGameEvent("edgecase:merchant-close");
+    this.clearGameplayInput();
     this.nearMerchant = false;
     this.nearExit = false;
     this.quiz = null;
@@ -1069,44 +1004,31 @@ export class GameScene extends Phaser.Scene {
         enemy.setVelocity(0, 0);
       }
     }
-    this.add.rectangle(640, 360, 1280, 720, 0x07100f, 0.9).setScrollFactor(0).setDepth(100);
-    this.add.text(640, 205, title, {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: "68px",
-      color: "#e7d66b",
-      stroke: "#101814",
-      strokeThickness: 6
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
-    this.add.text(448, 288, `Coins banked: ${this.coins}\nHealth left: ${this.health}/${this.maxHealth}\nDifficulty: ${this.difficulty.toUpperCase()}`, {
-      fontFamily: "Cascadia Mono, Consolas, monospace",
-      fontSize: "26px",
-      color: "#edf8ed",
-      lineSpacing: 14
-    }).setScrollFactor(0).setDepth(101);
+    emitGameEvent("edgecase:end-run-open", {
+      title,
+      coins: this.coins,
+      health: this.health,
+      maxHealth: this.maxHealth,
+      difficulty: this.difficulty,
+      isEditorPlaytest: this.isEditorPlaytest
+    });
+  }
 
-    if (this.isEditorPlaytest) {
-      const playAgain = this.addEndRunButton(505, 500, 260, "PLAY AGAIN", 0xe7d66b, "#07100f");
-      const back = this.addEndRunButton(775, 500, 210, "BACK", 0x3fa68f, "#07100f");
-      playAgain.on("pointerdown", () => this.scene.start("GameScene"));
-      back.on("pointerdown", () => this.returnToLevelEditor());
-      this.input.keyboard.once("keydown-SPACE", () => this.scene.start("GameScene"));
-      this.input.keyboard.once("keydown-ESC", () => this.returnToLevelEditor());
+  executeEndRunAction(action) {
+    if (!this.runEnded || !action) {
       return;
     }
 
-    const restart = this.addEndRunButton(640, 500, 310, "NEW RUN", 0xe7d66b, "#07100f");
-    restart.on("pointerdown", () => this.scene.start("MenuScene"));
-    this.input.keyboard.once("keydown-SPACE", () => this.scene.start("MenuScene"));
-  }
+    emitGameEvent("edgecase:end-run-close");
+    emitGameEvent("edgecase:hud-clear");
 
-  addEndRunButton(x, y, width, label, fill, color) {
-    const button = this.add.rectangle(x, y, width, 62, fill).setScrollFactor(0).setDepth(101).setInteractive({ useHandCursor: true });
-    this.add.text(x, y, label, {
-      fontFamily: "EdgecaseTitle, Bahnschrift, Impact",
-      fontSize: label === "BACK" || label.length > 9 ? "30px" : "34px",
-      color
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(102);
-    return button;
+    if (action === "play-again") {
+      this.scene.start("GameScene");
+    } else if (action === "back-editor") {
+      this.returnToLevelEditor();
+    } else {
+      this.scene.start("MenuScene");
+    }
   }
 
   returnToLevelEditor() {
@@ -1154,9 +1076,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateHud() {
-    this.coinText.setText(`${this.coins}`);
-    this.healthText.setText(`HP ${this.health}/${this.maxHealth}`);
-
     const buffs = [];
     if (this.upgrades.dash) buffs.push("Dash");
     if (this.upgrades.doubleJump) buffs.push("Double jump");
@@ -1165,33 +1084,35 @@ export class GameScene extends Phaser.Scene {
     if (this.time.now < this.tempBuffs.speedUntil) buffs.push("Speed buff");
     if (this.time.now < this.tempBuffs.magnetUntil) buffs.push("Magnet buff");
     if (this.time.now < this.tempBuffs.shieldUntil) buffs.push("Shield buff");
-    this.statusText.setText(`FIELD Tech  |  ${this.difficulty.toUpperCase()}  |  ${buffs.join(", ") || "No upgrades"}`);
+    const status = `FIELD ${this.level.name || "Tech"}  |  ${this.difficulty.toUpperCase()}  |  ${buffs.join(", ") || "No upgrades"}`;
+    let prompt = "";
 
     if (this.merchantOpen) {
-      this.promptText.setText("");
+      prompt = "";
     } else if (this.nearMerchant) {
-      this.promptText.setText("Press E: Merchant");
+      prompt = "Press E: Merchant";
     } else if (this.nearExit) {
-      this.promptText.setText("Press E: End run");
+      prompt = "Press E: End run";
     } else if (this.quiz) {
-      this.promptText.setText(this.quiz.selectedAnswer === null ? "Stand in a door" : "Press E: Lock answer");
-    } else {
-      this.promptText.setText("");
+      prompt = this.quiz.selectedAnswer === null ? "Stand in a door" : "Press E: Lock answer";
+    }
+
+    const hud = {
+      coins: this.coins,
+      health: this.health,
+      maxHealth: this.maxHealth,
+      status,
+      prompt
+    };
+    const key = JSON.stringify(hud);
+    if (key !== this.lastHudKey) {
+      this.lastHudKey = key;
+      emitGameEvent("edgecase:hud-update", hud);
     }
   }
 
   showToast(message) {
-    this.toastText.setText(message);
-    this.toastText.setVisible(true);
-    this.tweens.killTweensOf(this.toastText);
-    this.toastText.setAlpha(1);
-    this.tweens.add({
-      targets: this.toastText,
-      alpha: 0,
-      delay: 1400,
-      duration: 350,
-      onComplete: () => this.toastText.setVisible(false)
-    });
+    emitGameEvent("edgecase:toast", { message });
   }
 
   menuUpPressed() {
