@@ -12,7 +12,15 @@ export function GameplayHud({ hud }) {
           <span className="hud-coin" aria-hidden="true" />
           <span>{hud.coins}</span>
         </div>
-        <div className="hud-pill hud-pill--health">HP {hud.health}/{hud.maxHealth}</div>
+        <div className="hud-health" aria-label={`Health ${hud.health} of ${hud.maxHealth}`}>
+          {Array.from({ length: hud.maxHealth }, (_, index) => (
+            <span
+              key={index}
+              className={index < hud.health ? "hud-health__cell hud-health__cell--full" : "hud-health__cell"}
+              aria-hidden="true"
+            />
+          ))}
+        </div>
       </div>
       <div className="hud-cluster hud-cluster--center">
         <div className="hud-status">{hud.status}</div>

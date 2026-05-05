@@ -237,7 +237,7 @@ canvas {
   margin-top: var(--settings-list-margin-top);
   margin-left: var(--settings-list-margin-left);
   overflow-y: hidden;
-  scrollbar-color: #d6b548 rgba(3, 33, 27, 0.68);
+  scrollbar-color: #d6b548 transparent;
 }
 
 .level-card-grid--scrollable {
@@ -355,6 +355,30 @@ canvas {
   color: #d65f4f;
 }
 
+.hud-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 0;
+}
+
+.hud-health__cell {
+  width: 18px;
+  height: 26px;
+  border: 3px solid #07100f;
+  border-radius: 4px;
+  background: rgba(31, 39, 35, 0.86);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.44);
+}
+
+.hud-health__cell--full {
+  background: linear-gradient(180deg, #ff7b68 0%, #d65f4f 58%, #9e332b 100%);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.44),
+    0 0 10px rgba(214, 95, 79, 0.58);
+}
+
 .hud-coin {
   width: 18px;
   height: 18px;
@@ -419,6 +443,10 @@ canvas {
 .merchant-panel,
 .end-run-panel {
   width: min(780px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  scrollbar-color: #d6b548 transparent;
+  scrollbar-gutter: stable;
   gap: 24px;
   padding: 42px 38px 34px;
   border: 3px solid rgba(36, 86, 74, 0.86);
@@ -558,6 +586,10 @@ canvas {
 
 .pause-panel {
   width: min(540px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  scrollbar-color: #d6b548 transparent;
+  scrollbar-gutter: stable;
   gap: 24px;
   padding: 42px 38px 34px;
   border: 3px solid rgba(36, 86, 74, 0.86);
@@ -609,8 +641,40 @@ canvas {
   display: grid;
   gap: var(--panel-gap);
   width: var(--safe-content-width);
+  max-height: min(560px, calc(100% - var(--safe-pad-y) - 170px));
   margin-top: var(--settings-list-margin-top);
   margin-left: var(--settings-list-margin-left);
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-color: #d6b548 transparent;
+  scrollbar-gutter: stable;
+}
+
+.merchant-panel::-webkit-scrollbar,
+.end-run-panel::-webkit-scrollbar,
+.pause-panel::-webkit-scrollbar,
+.settings-panel-list::-webkit-scrollbar,
+.level-card-grid::-webkit-scrollbar {
+  width: 14px;
+}
+
+.merchant-panel::-webkit-scrollbar-track,
+.end-run-panel::-webkit-scrollbar-track,
+.pause-panel::-webkit-scrollbar-track,
+.settings-panel-list::-webkit-scrollbar-track,
+.level-card-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.merchant-panel::-webkit-scrollbar-thumb,
+.end-run-panel::-webkit-scrollbar-thumb,
+.pause-panel::-webkit-scrollbar-thumb,
+.settings-panel-list::-webkit-scrollbar-thumb,
+.level-card-grid::-webkit-scrollbar-thumb {
+  border: 3px solid #07100f;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f4e786, #d6b548 58%, #9d7620);
+  box-shadow: 0 0 8px rgba(226, 170, 46, 0.4);
 }
 
 .settings-row {

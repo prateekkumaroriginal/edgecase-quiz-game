@@ -38,7 +38,7 @@ export class GameScene extends Phaser.Scene {
     this.worldHeight = this.level.worldHeight || 720;
     this.floorY = this.level.floorY || this.worldHeight - 68;
     this.coins = 0;
-    this.maxHealth = 3;
+    this.maxHealth = 5;
     this.health = this.maxHealth;
     this.answerStreak = 0;
     this.runEnded = false;
@@ -233,7 +233,7 @@ export class GameScene extends Phaser.Scene {
       const center = this.centerFromTopLeft("coin", item);
       const coin = this.coinGroup.create(center.x, center.y, "coin");
       coin.body.setCircle(12);
-      coin.setData("value", item.value || 3);
+      coin.setData("value", 1);
     }
 
     this.physics.add.overlap(this.player, this.coinGroup, (_, coin) => this.collectCoin(coin));
@@ -819,6 +819,7 @@ export class GameScene extends Phaser.Scene {
     this.merchantHoldComplete = false;
     this.clearGameplayInput();
     this.player.setVelocity(0, 0);
+    this.physics.pause();
     this.playTone("menu");
     this.emitMerchantState("edgecase:merchant-open");
   }
@@ -832,6 +833,9 @@ export class GameScene extends Phaser.Scene {
     this.merchantOpen = false;
     this.clearGameplayInput();
     this.resetMerchantHold();
+    if (!this.paused && !this.runEnded) {
+      this.physics.resume();
+    }
     emitGameEvent("edgecase:merchant-close");
   }
 

@@ -11,7 +11,7 @@ export function MerchantScreen({ state, onAction }) {
   const screenRef = useRef(null);
   const holdFrameRef = useRef(null);
   const holdStartRef = useRef(0);
-  const [focusedRow, setFocusedRow] = useState(null);
+  const [focusedRow, setFocusedRow] = useState(() => state?.selectedIndex ?? null);
   const [holdProgress, setHoldProgress] = useState(0);
   const upgrades = useMemo(() => state?.upgrades || [], [state]);
   useFocusSound(focusedRow);
@@ -21,8 +21,8 @@ export function MerchantScreen({ state, onAction }) {
   }, []);
 
   useEffect(() => {
-    setFocusedRow(null);
-  }, [state]);
+    setFocusedRow((current) => current ?? state?.selectedIndex ?? null);
+  }, [state?.selectedIndex]);
 
   const stopHold = useCallback(() => {
     const wasHolding = Boolean(holdFrameRef.current || holdStartRef.current);

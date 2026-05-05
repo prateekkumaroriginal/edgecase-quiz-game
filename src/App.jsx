@@ -41,6 +41,7 @@ export default function App() {
       setPauseVisible(false);
       setMerchantState(null);
       setEndRunState(null);
+      setToastState(null);
       setScreen("settings");
     };
     const openMenu = () => {
@@ -48,12 +49,14 @@ export default function App() {
       setMerchantState(null);
       setEndRunState(null);
       setHudState(null);
+      setToastState(null);
       setScreen("menu");
     };
     const openLevelSelect = () => {
       setPauseVisible(false);
       setMerchantState(null);
       setEndRunState(null);
+      setToastState(null);
       setScreen("level-select");
     };
     const openPause = () => {
@@ -107,6 +110,12 @@ export default function App() {
     }
   }, [screen]);
 
+  useEffect(() => {
+    if (screen !== "game") {
+      setToastState(null);
+    }
+  }, [screen]);
+
   const startScene = (sceneName) => {
     const registry = getRegistry();
     if (sceneName === "LevelEditorScene") {
@@ -116,6 +125,7 @@ export default function App() {
     setPauseVisible(false);
     setMerchantState(null);
     setEndRunState(null);
+    setToastState(null);
     setScreen("game");
     gameRef.current?.scene?.start(sceneName);
   };
@@ -129,6 +139,7 @@ export default function App() {
     setPauseVisible(false);
     setMerchantState(null);
     setEndRunState(null);
+    setToastState(null);
     setScreen("game");
     gameRef.current?.scene?.start("GameScene");
   };
@@ -139,6 +150,7 @@ export default function App() {
     setPauseVisible(false);
     setMerchantState(null);
     setEndRunState(null);
+    setToastState(null);
     setScreen("game");
     gameRef.current?.scene?.start("LevelEditorScene");
   };

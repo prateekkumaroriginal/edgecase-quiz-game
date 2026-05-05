@@ -467,7 +467,18 @@ export const LEVELS = [
       width: 116,
       height: 140
     },
-    signs: [],
+    signs: [
+      {
+        x: 304,
+        y: 160,
+        text: "SIGN"
+      },
+      {
+        x: 344,
+        y: 140,
+        text: "SIGN"
+      }
+    ],
     worldHeight: 720
   },
   {
