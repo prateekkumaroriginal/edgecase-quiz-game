@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusSound } from "./useFocusSound.js";
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -10,17 +11,18 @@ export function MerchantScreen({ state, onAction }) {
   const screenRef = useRef(null);
   const holdFrameRef = useRef(null);
   const holdStartRef = useRef(0);
-  const [focusedRow, setFocusedRow] = useState(() => state?.selectedIndex || 0);
+  const [focusedRow, setFocusedRow] = useState(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const upgrades = useMemo(() => state?.upgrades || [], [state]);
+  useFocusSound(focusedRow);
 
   useEffect(() => {
     screenRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    setFocusedRow(state?.selectedIndex || 0);
-  }, [state?.selectedIndex]);
+    setFocusedRow(null);
+  }, [state]);
 
   const stopHold = useCallback(() => {
     const wasHolding = Boolean(holdFrameRef.current || holdStartRef.current);
@@ -36,6 +38,10 @@ export function MerchantScreen({ state, onAction }) {
   }, [onAction]);
 
   const startHold = useCallback((index = focusedRow) => {
+    if (index === null) {
+      return;
+    }
+
     const item = upgrades[index];
     if (!item) {
       return;
@@ -86,10 +92,10 @@ export function MerchantScreen({ state, onAction }) {
 
       if (["ArrowUp", "KeyW"].includes(event.code)) {
         event.preventDefault();
-        focusRow((focusedRow + upgrades.length - 1) % upgrades.length);
+        focusRow(focusedRow === null ? upgrades.length - 1 : (focusedRow + upgrades.length - 1) % upgrades.length);
       } else if (["ArrowDown", "KeyS"].includes(event.code)) {
         event.preventDefault();
-        focusRow((focusedRow + 1) % upgrades.length);
+        focusRow(focusedRow === null ? 0 : (focusedRow + 1) % upgrades.length);
       } else if (["Space", "Enter"].includes(event.code)) {
         event.preventDefault();
         startHold();

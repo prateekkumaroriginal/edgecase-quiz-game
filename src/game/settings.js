@@ -1,4 +1,5 @@
 const SOUND_KEY = "edgecase:soundEnabled";
+const SFX_KEY = "edgecase:sfxEnabled";
 const BORDERLESS_KEY = "edgecase:borderless";
 const SOUND_VOLUME_KEY = "edgecase:soundVolume";
 const MUSIC_VOLUME_KEY = "edgecase:musicVolume";
@@ -62,6 +63,15 @@ export function getSoundEnabled() {
 export function setSoundEnabled(enabled) {
   writeBoolean(SOUND_KEY, true);
   return true;
+}
+
+export function getSfxEnabled() {
+  return readBoolean(SFX_KEY, true);
+}
+
+export function setSfxEnabled(enabled) {
+  writeBoolean(SFX_KEY, enabled);
+  return Boolean(enabled);
 }
 
 export function getSoundVolume() {

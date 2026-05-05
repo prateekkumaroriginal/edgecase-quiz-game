@@ -653,6 +653,7 @@ canvas {
   box-shadow: none;
 }
 
+.settings-row--toggle,
 .settings-row--window {
   grid-template-columns: var(--menu-row-icon-column) minmax(280px, 1fr) minmax(220px, 306px);
 }
@@ -836,6 +837,7 @@ canvas {
   }
 
   .settings-row,
+  .settings-row--toggle,
   .settings-row--window {
     grid-template-columns: 70px minmax(0, 1fr);
     gap: 12px 18px;
@@ -851,4 +853,3 @@ canvas {
     justify-self: start;
   }
 }
-

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Hammer, Play, Settings } from "lucide-react";
+import { useFocusSound } from "./useFocusSound.js";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
@@ -9,7 +10,8 @@ function cx(...classes) {
 
 export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
   const screenRef = useRef(null);
-  const [focusedRow, setFocusedRow] = useState(0);
+  const [focusedRow, setFocusedRow] = useState(null);
+  useFocusSound(focusedRow);
   const actions = useMemo(() => {
     const items = [
       {
@@ -39,6 +41,10 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
   }, [onLevelMaker, onPlay, onSettings]);
 
   const selectFocused = useCallback(() => {
+    if (focusedRow === null) {
+      return;
+    }
+
     actions[focusedRow]?.action();
   }, [actions, focusedRow]);
 
@@ -54,10 +60,10 @@ export function MenuScreen({ onPlay, onSettings, onLevelMaker }) {
 
       if (["ArrowUp", "KeyW"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + actions.length - 1) % actions.length);
+        setFocusedRow((current) => current === null ? actions.length - 1 : (current + actions.length - 1) % actions.length);
       } else if (["ArrowDown", "KeyS"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + 1) % actions.length);
+        setFocusedRow((current) => current === null ? 0 : (current + 1) % actions.length);
       } else if (["Space", "Enter"].includes(event.code)) {
         event.preventDefault();
         selectFocused();

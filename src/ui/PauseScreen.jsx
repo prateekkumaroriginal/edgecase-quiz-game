@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusSound } from "./useFocusSound.js";
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -6,7 +7,8 @@ function cx(...classes) {
 
 export function PauseScreen({ onAction }) {
   const screenRef = useRef(null);
-  const [focusedRow, setFocusedRow] = useState(0);
+  const [focusedRow, setFocusedRow] = useState(null);
+  useFocusSound(focusedRow);
   const actions = useMemo(() => [
     { label: "RESUME", action: "resume" },
     { label: "RESTART", action: "restart" },
@@ -19,6 +21,10 @@ export function PauseScreen({ onAction }) {
   }, [onAction]);
 
   const selectFocused = useCallback(() => {
+    if (focusedRow === null) {
+      return;
+    }
+
     selectAction(actions[focusedRow]?.action);
   }, [actions, focusedRow, selectAction]);
 
@@ -34,10 +40,10 @@ export function PauseScreen({ onAction }) {
 
       if (["ArrowUp", "KeyW"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + actions.length - 1) % actions.length);
+        setFocusedRow((current) => current === null ? actions.length - 1 : (current + actions.length - 1) % actions.length);
       } else if (["ArrowDown", "KeyS"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + 1) % actions.length);
+        setFocusedRow((current) => current === null ? 0 : (current + 1) % actions.length);
       } else if (["Space", "Enter"].includes(event.code)) {
         event.preventDefault();
         selectFocused();

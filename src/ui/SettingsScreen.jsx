@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Monitor, Music, Volume2 } from "lucide-react";
+import { ArrowLeft, Monitor, Music, Volume2, Zap } from "lucide-react";
 import {
   getBorderlessEnabled,
   getMusicVolume,
+  getSfxEnabled,
   getSoundVolume,
   setBorderlessEnabled,
   setMusicVolume,
+  setSfxEnabled,
   setSoundVolume
 } from "../game/settings.js";
-import { updateGlobalMusicVolume } from "../game/audio.js";
+import { playGlobalNavSound, updateGlobalMusicVolume } from "../game/audio.js";
+import { useFocusSound } from "./useFocusSound.js";
 
-const ROWS = ["sound", "music", "window"];
+const ROWS = ["sfx", "sound", "music", "window"];
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value)));
@@ -22,13 +25,15 @@ function percent(value) {
 
 export function SettingsScreen({ onBack }) {
   const screenRef = useRef(null);
+  const [sfxEnabled, setSfxEnabledState] = useState(() => getSfxEnabled());
   const [soundVolume, setSoundVolumeState] = useState(() => getSoundVolume());
   const [musicVolume, setMusicVolumeState] = useState(() => getMusicVolume());
   const [borderless, setBorderlessState] = useState(() => getBorderlessEnabled());
   const [windowModeAvailable, setWindowModeAvailable] = useState(() => Boolean(window.edgecase?.setBorderless));
   const [windowModeChecked, setWindowModeChecked] = useState(false);
-  const [focusedRow, setFocusedRow] = useState(2);
+  const [focusedRow, setFocusedRow] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
+  useFocusSound(focusedRow);
 
   const showStatus = useCallback((message) => {
     setStatusMessage(message);
@@ -76,6 +81,10 @@ export function SettingsScreen({ onBack }) {
     setSoundVolumeState(setSoundVolume(clamp01(value)));
   }, []);
 
+  const toggleSfx = useCallback(() => {
+    setSfxEnabledState((current) => setSfxEnabled(!current));
+  }, []);
+
   const updateMusic = useCallback((value) => {
     const next = setMusicVolume(clamp01(value));
     setMusicVolumeState(next);
@@ -106,15 +115,21 @@ export function SettingsScreen({ onBack }) {
   }, [borderless, showStatus, windowModeAvailable]);
 
   const adjustFocused = useCallback((delta) => {
+    if (focusedRow === null) {
+      return;
+    }
+
     const row = ROWS[focusedRow];
-    if (row === "sound") {
+    if (row === "sfx" && delta !== 0) {
+      toggleSfx();
+    } else if (row === "sound") {
       updateSound(soundVolume + delta);
     } else if (row === "music") {
       updateMusic(musicVolume + delta);
     } else if (delta !== 0) {
       toggleWindowMode();
     }
-  }, [focusedRow, musicVolume, soundVolume, toggleWindowMode, updateMusic, updateSound]);
+  }, [focusedRow, musicVolume, soundVolume, toggleSfx, toggleWindowMode, updateMusic, updateSound]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -124,10 +139,10 @@ export function SettingsScreen({ onBack }) {
 
       if (["ArrowUp", "KeyW"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + ROWS.length - 1) % ROWS.length);
+        setFocusedRow((current) => current === null ? ROWS.length - 1 : (current + ROWS.length - 1) % ROWS.length);
       } else if (["ArrowDown", "KeyS"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + 1) % ROWS.length);
+        setFocusedRow((current) => current === null ? 0 : (current + 1) % ROWS.length);
       } else if (["ArrowLeft", "KeyA"].includes(event.code)) {
         event.preventDefault();
         adjustFocused(-0.05);
@@ -136,7 +151,13 @@ export function SettingsScreen({ onBack }) {
         adjustFocused(0.05);
       } else if (["Space", "Enter"].includes(event.code)) {
         event.preventDefault();
-        if (ROWS[focusedRow] === "window") {
+        if (focusedRow === null) {
+          return;
+        }
+
+        if (ROWS[focusedRow] === "sfx") {
+          toggleSfx();
+        } else if (ROWS[focusedRow] === "window") {
           toggleWindowMode();
         }
       } else if (event.code === "Escape") {
@@ -147,7 +168,7 @@ export function SettingsScreen({ onBack }) {
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [adjustFocused, focusedRow, onBack, toggleWindowMode]);
+  }, [adjustFocused, focusedRow, onBack, toggleSfx, toggleWindowMode]);
 
   const windowLabel = useMemo(() => {
     if (!windowModeAvailable && windowModeChecked) return "DESKTOP ONLY";
@@ -161,7 +182,13 @@ export function SettingsScreen({ onBack }) {
           <h1 className="page-title">SETTINGS</h1>
           <p>SYSTEM / DISPLAY / AUDIO</p>
         </div>
-        <button type="button" className="settings-back" onClick={onBack}>
+        <button
+          type="button"
+          className="settings-back"
+          onFocus={playGlobalNavSound}
+          onMouseEnter={playGlobalNavSound}
+          onClick={onBack}
+        >
           <ArrowLeft aria-hidden="true" strokeWidth={4} />
           <span>BACK</span>
         </button>
@@ -169,8 +196,30 @@ export function SettingsScreen({ onBack }) {
 
       <div className="settings-panel-list">
         <article
-          className={`settings-row ${focusedRow === 0 ? "settings-row--focused" : ""}`}
+          className={`settings-row settings-row--toggle ${focusedRow === 0 ? "settings-row--focused" : ""}`}
           onMouseEnter={() => setFocusedRow(0)}
+        >
+          <div className="settings-icon" aria-hidden="true">
+            <Zap strokeWidth={3.6} />
+          </div>
+          <div className="settings-row__copy">
+            <h2>SFX</h2>
+            <p>Enables jumps, coins, hits, and UI focus sounds</p>
+          </div>
+          <button
+            type="button"
+            className="settings-mode-button"
+            aria-pressed={sfxEnabled}
+            onFocus={() => setFocusedRow(0)}
+            onClick={toggleSfx}
+          >
+            {sfxEnabled ? "ON" : "OFF"}
+          </button>
+        </article>
+
+        <article
+          className={`settings-row ${focusedRow === 1 ? "settings-row--focused" : ""}`}
+          onMouseEnter={() => setFocusedRow(1)}
         >
           <div className="settings-icon" aria-hidden="true">
             <Volume2 strokeWidth={3.6} />
@@ -188,7 +237,7 @@ export function SettingsScreen({ onBack }) {
               step="0.01"
               value={soundVolume}
               style={{ "--slider-value": `${soundVolume * 100}%` }}
-              onFocus={() => setFocusedRow(0)}
+              onFocus={() => setFocusedRow(1)}
               onChange={(event) => updateSound(event.target.value)}
             />
           </label>
@@ -196,8 +245,8 @@ export function SettingsScreen({ onBack }) {
         </article>
 
         <article
-          className={`settings-row ${focusedRow === 1 ? "settings-row--focused" : ""}`}
-          onMouseEnter={() => setFocusedRow(1)}
+          className={`settings-row ${focusedRow === 2 ? "settings-row--focused" : ""}`}
+          onMouseEnter={() => setFocusedRow(2)}
         >
           <div className="settings-icon" aria-hidden="true">
             <Music strokeWidth={3.6} />
@@ -215,7 +264,7 @@ export function SettingsScreen({ onBack }) {
               step="0.01"
               value={musicVolume}
               style={{ "--slider-value": `${musicVolume * 100}%` }}
-              onFocus={() => setFocusedRow(1)}
+              onFocus={() => setFocusedRow(2)}
               onChange={(event) => updateMusic(event.target.value)}
             />
           </label>
@@ -223,8 +272,8 @@ export function SettingsScreen({ onBack }) {
         </article>
 
         <article
-          className={`settings-row settings-row--window ${focusedRow === 2 ? "settings-row--focused" : ""}`}
-          onMouseEnter={() => setFocusedRow(2)}
+          className={`settings-row settings-row--window ${focusedRow === 3 ? "settings-row--focused" : ""}`}
+          onMouseEnter={() => setFocusedRow(3)}
         >
           <div className="settings-icon" aria-hidden="true">
             <Monitor strokeWidth={3.6} />
@@ -237,7 +286,7 @@ export function SettingsScreen({ onBack }) {
             type="button"
             className="settings-mode-button"
             disabled={!windowModeAvailable}
-            onFocus={() => setFocusedRow(2)}
+            onFocus={() => setFocusedRow(3)}
             onClick={toggleWindowMode}
           >
             {windowLabel}

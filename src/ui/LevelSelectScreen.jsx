@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Edit3, Trash2 } from "lucide-react";
 import { LEVELS } from "../game/data/levels.js";
+import { playGlobalNavSound } from "../game/audio.js";
+import { useFocusSound } from "./useFocusSound.js";
 
 const IS_DEV = import.meta.env.DEV || Boolean(window.edgecase?.isDev);
 
@@ -42,9 +44,10 @@ export function LevelSelectScreen({
   const itemRefs = useRef([]);
   const [devLevels, setDevLevels] = useState(() => initialDevLevels || []);
   const [devLevelsLoaded, setDevLevelsLoaded] = useState(() => Boolean(initialDevLevelsLoaded));
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(null);
   const [gridScrollable, setGridScrollable] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  useFocusSound(selectedIndex);
 
   const levels = useMemo(() => mergeLevels(devLevels, devLevelsLoaded), [devLevels, devLevelsLoaded]);
 
@@ -116,13 +119,20 @@ export function LevelSelectScreen({
     }
 
     setSelectedIndex((current) => {
-      const next = Math.max(0, Math.min(levels.length - 1, current + delta));
+      const fallback = delta < 0 ? levels.length - 1 : 0;
+      const next = current === null
+        ? fallback
+        : Math.max(0, Math.min(levels.length - 1, current + delta));
       window.requestAnimationFrame(() => scrollSelectedIntoView(next));
       return next;
     });
   }, [levels.length, scrollSelectedIntoView]);
 
   const playSelected = useCallback(() => {
+    if (selectedIndex === null) {
+      return;
+    }
+
     const level = levels[selectedIndex];
     if (level) {
       onPlayLevel(level.id);
@@ -181,7 +191,7 @@ export function LevelSelectScreen({
       setDevLevels(nextLevels);
       setDevLevelsLoaded(true);
       onDeleteLevel(level.id, nextLevels);
-      setSelectedIndex((current) => Math.min(current, Math.max(0, nextLevels.length - 1)));
+      setSelectedIndex((current) => current === null ? null : Math.min(current, Math.max(0, nextLevels.length - 1)));
       setStatusMessage(`Deleted ${level.name}`);
     } catch (error) {
       setStatusMessage(error?.message || "Could not delete level.");
@@ -200,7 +210,13 @@ export function LevelSelectScreen({
           <h1 className="page-title">SELECT LEVEL</h1>
           <p className="level-select-subtitle">CHOOSE / PLAY / EDIT</p>
         </div>
-        <button type="button" className="settings-back" onClick={onBack}>
+        <button
+          type="button"
+          className="settings-back"
+          onFocus={playGlobalNavSound}
+          onMouseEnter={playGlobalNavSound}
+          onClick={onBack}
+        >
           <ArrowLeft aria-hidden="true" strokeWidth={4} />
           <span>BACK</span>
         </button>

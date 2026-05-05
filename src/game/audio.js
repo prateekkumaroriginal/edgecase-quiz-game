@@ -1,9 +1,10 @@
-import { getMusicVolume, getSoundEnabled } from "./settings.js";
+import { getMusicVolume, getSfxEnabled, getSoundEnabled, getSoundVolume } from "./settings.js";
 
 let audioContext = null;
 let musicGain = null;
 let musicTimer = null;
 let musicStep = 0;
+let lastUiSoundAt = 0;
 
 function getAudioContext() {
   if (!getSoundEnabled()) {
@@ -64,6 +65,81 @@ export function installGlobalAudioUnlock() {
   const unlock = () => startGlobalMusic();
   window.addEventListener("pointerdown", unlock, { passive: true });
   window.addEventListener("keydown", unlock);
+  document.addEventListener("click", handleGlobalButtonClick, { capture: true });
+}
+
+export function playGlobalNavSound() {
+  playUiTone("nav");
+}
+
+export function playGlobalClickSound() {
+  playUiTone("click");
+}
+
+function playUiTone(type) {
+  if (!getSoundEnabled() || !getSfxEnabled()) {
+    return;
+  }
+
+  const nowMs = performance.now();
+  if (nowMs - lastUiSoundAt < 34) {
+    return;
+  }
+
+  const audio = getAudioContext();
+  if (!audio) {
+    return;
+  }
+
+  lastUiSoundAt = nowMs;
+  const now = audio.currentTime;
+  const volume = Math.max(0.001, getSoundVolume() * (type === "click" ? 0.15 : 0.1));
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  const filter = audio.createBiquadFilter();
+
+  osc.type = type === "click" ? "square" : "triangle";
+  osc.frequency.setValueAtTime(type === "click" ? 620 : 520, now);
+  osc.frequency.exponentialRampToValueAtTime(type === "click" ? 360 : 430, now + 0.045);
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(type === "click" ? 620 : 520, now);
+  filter.Q.setValueAtTime(type === "click" ? 5 : 3.2, now);
+
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + (type === "click" ? 0.082 : 0.058));
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(audio.destination);
+  osc.start(now);
+  osc.stop(now + (type === "click" ? 0.095 : 0.07));
+}
+
+function handleGlobalButtonClick(event) {
+  const control = getUiSoundControl(event.target);
+  if (!control || control.closest(".merchant-screen") || isPageTransitionControl(control)) {
+    return;
+  }
+
+  playGlobalClickSound();
+}
+
+function getUiSoundControl(target) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const control = target.closest("button, [role='button'], .menu-action-row, .level-card");
+  if (!control || control.disabled || control.getAttribute("aria-disabled") === "true") {
+    return null;
+  }
+
+  return control;
+}
+
+function isPageTransitionControl(control) {
+  return Boolean(control.closest(".menu-action-row, .level-card, .settings-back, .pause-action-row"));
 }
 
 function playMusicStep() {

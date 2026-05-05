@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusSound } from "./useFocusSound.js";
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -16,9 +17,14 @@ export function EndRunScreen({ state, onAction }) {
 
     return [{ label: "NEW RUN", action: "menu" }];
   }, [state?.isEditorPlaytest]);
-  const [focusedRow, setFocusedRow] = useState(0);
+  const [focusedRow, setFocusedRow] = useState(null);
+  useFocusSound(focusedRow);
 
   const selectFocused = useCallback(() => {
+    if (focusedRow === null) {
+      return;
+    }
+
     onAction(actions[focusedRow]?.action);
   }, [actions, focusedRow, onAction]);
 
@@ -34,10 +40,10 @@ export function EndRunScreen({ state, onAction }) {
 
       if (["ArrowLeft", "ArrowUp", "KeyA", "KeyW"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + actions.length - 1) % actions.length);
+        setFocusedRow((current) => current === null ? actions.length - 1 : (current + actions.length - 1) % actions.length);
       } else if (["ArrowRight", "ArrowDown", "KeyD", "KeyS"].includes(event.code)) {
         event.preventDefault();
-        setFocusedRow((current) => (current + 1) % actions.length);
+        setFocusedRow((current) => current === null ? 0 : (current + 1) % actions.length);
       } else if (["Space", "Enter"].includes(event.code)) {
         event.preventDefault();
         selectFocused();
